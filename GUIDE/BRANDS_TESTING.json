@@ -1,0 +1,65 @@
+
+{
+  "brand_name": "Tesla",
+  "website_url": "https://tesla.com",
+  "product_categories": [
+    "electric vehicles",
+    "energy storage",
+    "solar panels",
+    "autonomous driving",
+    "charging infrastructure"
+  ],
+  "content_sample": "Tesla is a leading electric vehicle and clean energy company. We design and manufacture electric cars, energy storage systems, and solar panels. Our mission is to accelerate the world's transition to sustainable energy through innovative technology and sustainable transport solutions.",
+  "competitor_names": [
+    "Ford",
+    "BMW",
+    "Rivian",
+    "Lucid Motors",
+    "Mercedes-EQS"
+  ]
+}
+
+
+
+
+{
+  "brand_name": "Nike",
+  "content_sample": "Nike is a global leader in athletic footwear, apparel, equipment and accessories. We inspire athletes and everyday people to push their limits through innovative products and motivational marketing campaigns.",
+  "website_url": "https://nike.com"
+}
+
+
+
+
+
+{
+  "brand_name": "Apple",
+  "product_categories": [
+    "smartphones",
+    "laptops",
+    "tablets",
+    "smartwatches",
+    "wireless earbuds"
+  ]
+}
+
+more exampl
+
+
+
+{
+  "brand_name": "Slack",
+  "website_url": "https://slack.com",
+  "product_categories": [
+    "team communication",
+    "workplace collaboration",
+    "business messaging",
+    "project management"
+  ],
+  "content_sample": "Slack is a business communication platform offering many IRC-style features, including persistent chat rooms organized by topic, private groups, and direct messaging.",
+  "competitor_names": [
+    "Microsoft Teams",
+    "Discord",
+    "Zoom"
+  ]
+}
