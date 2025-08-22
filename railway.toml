@@ -3,6 +3,6 @@ builder = "DOCKERFILE"
 dockerfilePath = "docker-compose.yml"
 
 [deploy]
-startCommand = null
+startCommand = ""
 healthcheckPath = "/"
 restartPolicyType = "always"
