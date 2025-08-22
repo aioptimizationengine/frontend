@@ -1,16 +1,4 @@
 [build]
 builder = "dockerfile"
-dockerfilePath = "docker-compose.yml"
+dockerfilePath = "postgrace_Doc.yml"
 
-[deploy]
-startCommand = "uvicorn api:app --host 0.0.0.0 --port $PORT"
-healthcheckPath = "/"
-restartPolicyType = "always"
-
-[[volumes]]
-name = "postgres_data"
-mountPath = "/var/lib/postgresql/data"
-
-[[volumes]]
-name = "redis_data"
-mountPath = "/data"
