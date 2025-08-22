@@ -1,6 +1,6 @@
 [build]
 builder = "dockerfile"
-dockerfilePath = "postgrace_Doc.yml"
+dockerfilePath = "postgrace_Docker.yml"
 
 [deploy]
 startCommand = ""
