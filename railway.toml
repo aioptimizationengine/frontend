@@ -2,3 +2,8 @@
 builder = "dockerfile"
 dockerfilePath = "postgrace_Doc.yml"
 
+[deploy]
+startCommand = ""
+healthcheckPath = "/"
+restartPolicyType = "always"
+
