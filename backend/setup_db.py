@@ -1,7 +1,7 @@
 import os
 import sys
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import SQLAlchemyError, ProgrammingError
+from sqlalchemy.exc import SQLAlchemyError, ProgrammingError, IntegrityError
 
 SQL_FILE_DEFAULT_PATH = os.environ.get("DB_INIT_SQL", "/app/backend/database_setup.sql")
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -39,7 +39,7 @@ with engine.connect() as conn:
         try:
             conn.execute(text(statement))
             tx.commit()
-        except ProgrammingError as e:
+        except (ProgrammingError, IntegrityError) as e:
             # Handle duplicates idempotently
             pgcode = getattr(getattr(e, 'orig', None), 'pgcode', None)
             if pgcode in IGNORABLE_PG_CODES:
