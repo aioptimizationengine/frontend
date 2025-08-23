@@ -3,7 +3,7 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile.postgres"
 
 [deploy]
-startCommand = "sh -lc \"docker-entrypoint.sh postgres -p $PORT\""
+startCommand = "sh -lc \"/usr/local/bin/postgres-entrypoint.sh\""
 restartPolicyType = "always"
 healthcheckPath = "/" # not used; health via container healthcheck
 
