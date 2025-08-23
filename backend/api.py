@@ -12,6 +12,7 @@ from typing import List, Optional, Dict, Any
 import asyncio
 import structlog
 from fastapi import FastAPI, HTTPException, Depends, Request, status
+from fastapi import APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
@@ -52,6 +53,12 @@ try:
     from api_key_manager import APIKeyManager, APIKeyEncryption
 except ImportError as e:
     print(f"Optional import warning: {e}")
+
+# Fallback empty routers if optional imports failed
+if 'admin_router' not in locals():
+    admin_router = APIRouter()
+if 'log_analysis_router' not in locals():
+    log_analysis_router = APIRouter()
 
 logger = structlog.get_logger()
 
@@ -1545,6 +1552,10 @@ async def startup_event():
     # Initialize services
     try:
         # Check database connection
+        from database import init_database
+        # Ensure tables exist
+        init_database()
+        # Quick health check
         check_database_health()
         logger.info("Database connection established")
         
