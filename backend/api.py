@@ -1559,9 +1559,12 @@ async def startup_event():
         check_database_health()
         logger.info("Database connection established")
         
-        # Initialize cache
-        cache_utils = CacheUtils()
-        logger.info("Cache initialized")
+        # Initialize cache if available
+        if 'CacheUtils' in globals():
+            _ = CacheUtils()
+            logger.info("Cache initialized")
+        else:
+            logger.info("CacheUtils not available; skipping cache init")
         
         logger.info("AI Optimization Engine API started successfully")
         
