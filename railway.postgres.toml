@@ -1,0 +1,6 @@
+[service]
+name = "postgres"
+
+[deploy]
+# Railway's managed Postgres typically doesn't need a Docker build
+restartPolicyType = "always"

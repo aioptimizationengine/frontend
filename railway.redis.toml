@@ -1,0 +1,6 @@
+[service]
+name = "redis"
+
+[deploy]
+# Railway's managed Redis typically doesn't need a Docker build
+restartPolicyType = "always"

@@ -16,11 +16,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements first for better caching
 COPY backend/requirements.prod.txt ./requirements.txt
 
-# Install Python dependencies with optimizations for Railway
-RUN pip install --no-cache-dir -r requirements.prod.txt
+# Install Python dependencies with optimizations for Railway (production only)
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend source code
 COPY backend/ ./
+
+# Copy entrypoint script
+COPY backend/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
@@ -37,5 +41,5 @@ ENV PORT=8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Start command
-CMD ["python", "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start command (uses entrypoint to optionally install dev dependencies post-deploy)
+CMD ["sh", "/app/entrypoint.sh"]

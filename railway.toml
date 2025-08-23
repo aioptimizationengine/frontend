@@ -3,10 +3,13 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile.backend"
 
 [deploy]
-startCommand = "python -m uvicorn api:app --host 0.0.0.0 --port $PORT"
+startCommand = "sh /app/entrypoint.sh"
 healthcheckPath = "/health"
-restartPolicyType = "always"
 healthcheckTimeout = 300
+restartPolicyType = "always"
 
-# This will deploy just the backend first
-# After backend is working, you can add frontend services
+[variables]
+# Install only prod deps at build; optionally install dev deps post-deploy via entrypoint
+INSTALL_DEV_DEPS = "false"
+PORT = "8000"
+PYTHONPATH = "/app"
