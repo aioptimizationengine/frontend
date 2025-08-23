@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY backend/requirements.prod.txt ./requirements.txt
 
 # Install Python dependencies with optimizations for Railway
-RUN pip install --no-cache-dir -r requirements.prod.txt
+RUN pip install --no-cache-dir -r backend/requirements.prod.txt
 
 # Copy backend source code
 COPY backend/ ./
