@@ -1,0 +1,192 @@
+# Core Framework - Essential for running the app
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+fake-useragent
+beautifulsoup4
+requests
+
+# Database - Core database functionality
+sqlalchemy>=2.0.23
+psycopg2-binary>=2.9.9
+alembic>=1.13.0
+
+# Authentication & Security - Essential for user management
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.6
+PyJWT==2.8.0
+structlog>=23.1.0
+
+# Cache & Session Storage - For performance
+redis>=5.0.1
+aioredis>=2.0.1
+
+# Environment & Configuration - App configuration
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# API Clients - Core external integrations
+openai>=1.3.0
+anthropic>=0.7.0
+google-generativeai>=0.8.0
+aiohttp>=3.9.0
+aiofiles>=23.2.0
+
+# Text Processing & NLP - Lightweight alternatives
+nltk>=3.8.1
+textblob>=0.17.1
+
+# User Agent & IP Analysis - Core functionality
+user-agents>=2.2.0
+ua-parser>=0.18.0
+geoip2>=4.7.0
+maxminddb>=2.5.1
+
+# File Processing - Essential file operations
+python-magic>=0.4.27
+pandas>=2.1.0
+openpyxl>=3.1.2
+
+# Report Generation - Core reporting
+fpdf2>=2.7.6
+jinja2>=3.1.2
+
+# Logging & Monitoring - Production logging
+python-json-logger>=2.0.7
+
+# HTTP & Web Utilities - Core web functionality
+httpx>=0.25.0
+lxml>=4.9.3
+
+# Data Processing - Essential data operations
+numpy>=1.24.0
+
+# Async & Concurrency - Performance
+asyncio-throttle>=1.0.2
+asyncpg>=0.29.0
+
+# Validation & Parsing - Core validation
+validators>=0.22.0
+python-dateutil>=2.8.2
+pytz>=2023.3
+
+# System & Performance Monitoring - Production monitoring
+psutil>=5.9.0
+
+# Production Deployment - Production server
+gunicorn>=21.2.0
+
+# Rate Limiting - API protection
+slowapi>=0.1.8
+
+# CORS - Web security
+fastapi-cors>=0.0.6
+
+# Background Tasks - Core async functionality
+celery>=5.3.0
+apscheduler>=3.10.4
+
+# Metrics & Health Checks - Production monitoring
+prometheus-client>=0.19.0
+
+# Email - Core notifications
+emails>=0.6.0
+sendgrid>=6.10.0
+
+# Webhook handling - Core integrations
+stripe
+
+# CSV Processing - Essential data import/export
+csvkit>=1.1.1
+
+# Additional utilities - Core functionality
+click>=8.1.7
+rich>=13.7.0
+schedule>=1.2.0
+
+# Authentication - Core security
+bcrypt>=4.0.1
+
+# Async utilities - Performance
+anyio>=4.0.0
+
+# Email validation - Core validation
+email-validator>=2.0.0
+
+# Advanced cryptography - Security
+cryptography>=41.0.0
+
+# JSON processing - Performance
+ujson>=5.8.0
+
+# Additional utilities - Core functionality
+shortuuid>=1.0.11
+arrow>=1.3.0
+
+# Regular expressions - Core functionality
+regex>=2023.10.3
+
+# Collections utilities - Core functionality
+collections-extended>=2.0.2
+
+# Functional programming - Core utilities
+toolz>=0.12.0
+
+# URL processing - Core functionality
+urllib3>=2.0.0
+
+# Caching utilities - Performance
+cachetools>=5.3.2
+
+# Retry utilities - Reliability
+tenacity>=8.2.3
+
+# String utilities - Core functionality
+unidecode>=1.3.7
+
+# Text distance - Core functionality
+textdistance>=4.6.0
+
+# Fuzzy matching - Core functionality
+fuzzywuzzy>=0.18.0
+python-levenshtein>=0.21.1
+
+# Language detection - Core functionality
+langdetect>=1.0.9
+
+# Image processing - Core functionality
+Pillow>=10.0.0
+
+# Encoding detection - Core functionality
+chardet>=5.2.0
+
+# File type detection - Core functionality
+filetype>=1.2.0
+
+# Compression - Core functionality
+zstandard>=0.21.0
+
+# Error tracking - Production monitoring
+sentry-sdk>=1.38.0
+
+# WebSocket support - Real-time features
+websockets>=11.0.3
+
+# Additional database utilities - Core functionality
+sqlmodel>=0.0.8
+
+# Security token handling - Core security
+itsdangerous>=2.1.2
+
+# OAuth - Core authentication
+google-auth>=2.23.0
+google-auth-httplib2>=0.1.0
+google-auth-oauthlib>=1.1.0
+
+# Content extraction - Core functionality
+markdownify>=0.11.6
+html2text>=2020.1.16
+premailer>=3.10.0
+newspaper3k>=0.2.8
+readability-lxml>=0.8.1

@@ -17,6 +17,8 @@ services:
     restart: unless-stopped
     networks:
       - ai_optimization_network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
   # Redis Cache & Tracking Data Store
   redis:
@@ -33,12 +35,14 @@ services:
     restart: unless-stopped
     networks:
       - ai_optimization_network
+    volumes:
+      - redis_data:/data
 
   # Backend API
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ../Dockerfile.backend
     container_name: ai_optimization_backend
     ports:
       - "${API_PORT:-8000}:8000"
@@ -54,7 +58,7 @@ services:
       - REDIS_URL=redis://redis:6379
       
       # Application Settings
-      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
       - DEBUG=${DEBUG:-false}
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
       
@@ -74,8 +78,25 @@ services:
         echo 'Waiting for database...' &&
         sleep 5 &&
         echo 'Starting application...' &&
-        uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+        python -m uvicorn api:app --host 0.0.0.0 --port 8000
       "
+    restart: unless-stopped
+    networks:
+      - ai_optimization_network
+
+  # Frontend Application
+  frontend:
+    build:
+      context: .
+      dockerfile: ../Dockerfile.frontend
+    container_name: ai_optimization_frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    depends_on:
+      - backend
     restart: unless-stopped
     networks:
       - ai_optimization_network
@@ -89,107 +110,14 @@ services:
       - "${NGINX_SSL_PORT:-443}:443"
     depends_on:
       - backend
+      - frontend
     profiles:
       - production
     restart: unless-stopped
     networks:
       - ai_optimization_network
-
-  # Redis Commander (Development Tool)
-  redis-commander:
-    image: rediscommander/redis-commander:latest
-    container_name: ai_optimization_redis_commander
-    environment:
-      - REDIS_HOSTS=local:redis:6379
-    ports:
-      - "${REDIS_COMMANDER_PORT:-8081}:8081"
-    depends_on:
-      - redis
-    profiles:
-      - development
-    restart: unless-stopped
-    networks:
-      - ai_optimization_network
-
-  # pgAdmin (Development Tool)
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: ai_optimization_pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@aioptimization.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
-    ports:
-      - "${PGADMIN_PORT:-5050}:80"
-    depends_on:
-      - postgres
-    profiles:
-      - development
-    restart: unless-stopped
-    networks:
-      - ai_optimization_network
-
-  # Prometheus (Monitoring)
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: ai_optimization_prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-    ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
-    profiles:
-      - monitoring
-    restart: unless-stopped
-    networks:
-      - ai_optimization_network
-
-  # Grafana (Monitoring Dashboard)
-  grafana:
-    image: grafana/grafana:latest
-    container_name: ai_optimization_grafana
-    environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
-      - GF_USERS_ALLOW_SIGN_UP=false
-    ports:
-      - "${GRAFANA_PORT:-3001}:3000"
-    depends_on:
-      - prometheus
-    profiles:
-      - monitoring
-    restart: unless-stopped
-    networks:
-      - ai_optimization_network
-
-  # Log Aggregation (Development/Production)
-  loki:
-    image: grafana/loki:latest
-    container_name: ai_optimization_loki
-    ports:
-      - "${LOKI_PORT:-3100}:3100"
-    command: -config.file=/etc/loki/loki-config.yml
-    profiles:
-      - monitoring
-    restart: unless-stopped
-    networks:
-      - ai_optimization_network
-
-  # Backup Service
-  backup:
-    image: postgres:15-alpine
-    container_name: ai_optimization_backup
-    environment:
-      - PGPASSWORD=${POSTGRES_PASSWORD:-aioptimization}
-    command: /bin/sh -c "chmod +x /backup.sh && crond -f"
-    depends_on:
-      - postgres
-    profiles:
-      - production
-    restart: unless-stopped
-    networks:
-      - ai_optimization_network
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
 
 networks:
   ai_optimization_network:
@@ -198,5 +126,9 @@ networks:
       driver: default
       config:
         - subnet: 172.20.0.0/16
+
+volumes:
+  postgres_data:
+  redis_data:
 
 # NOTE: Set your ANTHROPIC_API_KEY and OPENAI_API_KEY in a .env file in the project root for security.
