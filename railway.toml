@@ -13,5 +13,5 @@ restartPolicyType = "always"
 INSTALL_DEV_DEPS = "false"
 PORT = "8000"
 PYTHONPATH = "/app"
-DATABASE_URL=postgresql+psycopg2://postgres:ykXThrJmGMgLNmZpFrZRMApCJCoXGmPW@centerbeam.proxy.rlwy.net:17842/railway?sslmode=require
+DATABASE_URL="postgresql+psycopg2://postgres:ykXThrJmGMgLNmZpFrZRMApCJCoXGmPW@centerbeam.proxy.rlwy.net:17842/railway?sslmode=require"
 REDIS_URL = "redis://default:ayvIxpXwEZZaleMFXLRHKfoYjKrwAeBT@redis.railway.internal:6379"
