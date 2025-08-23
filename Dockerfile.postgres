@@ -1,0 +1,25 @@
+# Postgres service Dockerfile
+FROM postgres:15-alpine
+
+# Set environment defaults (can be overridden by Railway variables)
+ENV POSTGRES_DB=aioptimization \
+    POSTGRES_USER=aioptimization \
+    POSTGRES_PASSWORD=aioptimization \
+    PGPORT=5432
+
+# Railway assigns service port by $PORT; map it to Postgres' port
+# Postgres listens on 5432; we will start it on PGPORT and expose 5432.
+# Railway will handle external port mapping to $PORT.
+EXPOSE 5432
+
+# Copy initialization SQL to init directory so it runs on first boot
+# This only runs when the data directory is empty (first initialization)
+COPY database_setup.sql /docker-entrypoint-initdb.d/01_database_setup.sql
+
+# Healthcheck using pg_isready
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
+  CMD pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" || exit 1
+
+# Default command (handled by official entrypoint)
+# We override the port with PGPORT to align with Railway variable mapping if needed
+CMD ["postgres"]

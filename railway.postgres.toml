@@ -1,6 +1,13 @@
-[service]
-name = "postgres"
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile.postgres"
 
 [deploy]
-# Railway's managed Postgres typically doesn't need a Docker build
+startCommand = "sh -lc \"docker-entrypoint.sh postgres -p $PORT\""
 restartPolicyType = "always"
+healthcheckPath = "/" # not used; health via container healthcheck
+
+[variables]
+POSTGRES_DB = "aioptimization"
+POSTGRES_USER = "aioptimization"
+POSTGRES_PASSWORD = "aioptimization"
