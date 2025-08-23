@@ -1,6 +1,7 @@
 import os
 import sys
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError, ProgrammingError
 
 SQL_FILE_DEFAULT_PATH = os.environ.get("DB_INIT_SQL", "/app/backend/database_setup.sql")
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -17,15 +18,38 @@ if not os.path.exists(sql_path):
 print(f"Connecting to database: {DATABASE_URL.split('@')[-1] if '@' in DATABASE_URL else DATABASE_URL}")
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
-with engine.begin() as conn:
-    print(f"Applying SQL from {sql_path}...")
+print(f"Applying SQL from {sql_path}...")
+with engine.connect() as conn:
     with open(sql_path, "r", encoding="utf-8") as f:
         sql_text = f.read()
-    # Split on ; only where it ends a statement to be safer could be complex; 
-    # simplest approach: run as one chunk. Many psql-specific meta-commands won't work here.
-    for statement in filter(None, [s.strip() for s in sql_text.split(';')]):
-        if not statement:
-            continue
-        conn.execute(text(statement))
+
+    # Naive split by semicolon; for complex scripts consider psql instead
+    statements = [s.strip() for s in sql_text.split(';') if s.strip()]
+
+    IGNORABLE_PG_CODES = {
+        '42710',  # duplicate_object (e.g., TYPE already exists)
+        '42P07',  # duplicate_table
+        '42701',  # duplicate_schema
+        '42723',  # duplicate_function
+        '23505',  # unique_violation (sometimes for seed data; ignore if desired)
+    }
+
+    for idx, statement in enumerate(statements, start=1):
+        tx = conn.begin()
+        try:
+            conn.execute(text(statement))
+            tx.commit()
+        except ProgrammingError as e:
+            # Handle duplicates idempotently
+            pgcode = getattr(getattr(e, 'orig', None), 'pgcode', None)
+            if pgcode in IGNORABLE_PG_CODES:
+                tx.rollback()
+                print(f"Skipping statement #{idx} due to duplicate (pgcode={pgcode}).")
+                continue
+            tx.rollback()
+            raise
+        except SQLAlchemyError:
+            tx.rollback()
+            raise
 
 print("Database setup complete.")
