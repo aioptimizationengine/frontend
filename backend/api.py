@@ -1562,7 +1562,7 @@ async def startup_event():
         # Initialize cache if available
         if 'CacheUtils' in globals():
             _ = CacheUtils()
-        logger.info("Cache initialized")
+            logger.info("Cache initialized")
         else:
             logger.info("CacheUtils not available; skipping cache init")
         
