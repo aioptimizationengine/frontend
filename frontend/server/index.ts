@@ -582,8 +582,8 @@ export function createApp() {
 
 export { createApp as createServer };
 
-// Start server if this file is run directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Start server only in non-production when run directly
+if (process.env.NODE_ENV !== 'production' && import.meta.url === `file://${process.argv[1]}`) {
   const app = createApp();
   const server = createServer(app);
   
