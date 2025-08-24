@@ -17,14 +17,7 @@ export default defineConfig(({ mode }) => ({
     outDir: "dist/spa",
     emptyOutDir: true,
     rollupOptions: {
-      output: {
-        manualChunks: {
-          react: ['react', 'react-dom', 'react-router-dom'],
-          vendor: ['lodash', 'axios', 'date-fns'],
-          ui: ['@chakra-ui/react', '@chakra-ui/icons', 'framer-motion'],
-          utils: ['react-query', 'react-hook-form', 'yup'],
-        }
-      }
+      // Let Rollup auto-split chunks to avoid requiring uninstalled libs
     },
     chunkSizeWarningLimit: 1000, // Increase chunk size warning limit to 1000kb
   },
