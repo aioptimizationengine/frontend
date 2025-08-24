@@ -1,0 +1,44 @@
+# Frontend multistage Dockerfile
+
+# Build stage
+FROM node:18-alpine AS builder
+WORKDIR /app
+
+# Install deps
+COPY frontend/package*.json ./
+# Improve reliability and reduce noise
+ENV NODE_OPTIONS=--max-old-space-size=2048
+RUN npm config set fund false && npm config set audit false \
+ && (npm ci || npm install --legacy-peer-deps)
+
+# Copy source and build
+COPY frontend/ ./
+RUN npm run build
+
+# Runtime stage
+FROM node:18-alpine
+WORKDIR /app
+
+# Install only production deps
+COPY frontend/package*.json ./
+ENV NODE_OPTIONS=--max-old-space-size=2048
+RUN npm config set fund false && npm config set audit false \
+ && (npm ci --omit=dev --prefer-offline || npm install --omit=dev --legacy-peer-deps)
+
+# Copy built assets
+COPY --from=builder /app/dist /app/dist
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs \
+ && adduser -S nextjs -u 1001
+USER nextjs
+
+ENV NODE_ENV=production
+ENV PORT=3000
+EXPOSE 3000
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
+
+CMD ["npm", "start"]
