@@ -11,3 +11,5 @@ restartPolicyType = "always"
 [variables]
 PORT = "3000"
 NODE_ENV = "production"
+VITE_API_BASE_URL = "https://backend-production-d6f2a.up.railway.app/"
+BACKEND_URL = "https://backend-production-d6f2a.up.railway.app"
