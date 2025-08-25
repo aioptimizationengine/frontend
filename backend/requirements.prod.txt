@@ -36,6 +36,10 @@ aiofiles>=23.2.0
 # Text Processing & NLP - Lightweight alternatives
 nltk>=3.8.1
 textblob>=0.17.1
+sentence-transformers>=2.2.2
+
+# ML runtime (CPU)
+torch>=2.0.0
 
 # User Agent & IP Analysis - Core functionality
 user-agents>=2.2.0

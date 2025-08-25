@@ -180,9 +180,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw new Error(errorMessage);
       }
 
-      const { data } = await response.json();
-      localStorage.setItem('authToken', data.token);
-      setUser(transformUserData(data.user));
+      // Do not auto-login on email registration; just return success
+      await response.json();
     } catch (error) {
       throw error;
     } finally {
