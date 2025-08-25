@@ -7,8 +7,10 @@ import { config } from "dotenv";
 import { handleDemo } from "./routes/demo";
 // Note: Auth handlers now proxy to FastAPI backend instead of using mock data
 
-// Load environment variables
-config();
+// Load environment variables (dev-only). In Railway, variables are injected by the platform.
+if (process.env.NODE_ENV !== 'production') {
+  config();
+}
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 const REQUEST_TIMEOUT = 60000; // 1 minute timeout

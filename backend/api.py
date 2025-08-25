@@ -308,11 +308,13 @@ async def analyze_brand(
         )
         
         # Initialize optimization engine
+        # Respect both USE_REAL_TRACKING and ENABLE_REAL_TRACKING for compatibility with Railway vars
+        use_real_tracking_env = os.getenv('USE_REAL_TRACKING') or os.getenv('ENABLE_REAL_TRACKING') or 'false'
         engine = AIOptimizationEngine({
             'anthropic_api_key': os.getenv('ANTHROPIC_API_KEY', 'test_key'),
             'openai_api_key': os.getenv('OPENAI_API_KEY', 'test_key'),
             'environment': os.getenv('ENVIRONMENT', 'test'),
-            'use_real_tracking': os.getenv('USE_REAL_TRACKING', 'false').lower() == 'true'
+            'use_real_tracking': str(use_real_tracking_env).strip().lower() in {"1", "true", "yes", "y", "on"}
         })
 
         # Use real engine output instead of dummy placeholder data

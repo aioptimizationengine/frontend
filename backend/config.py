@@ -1,7 +1,9 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env locally for development; in Railway, env vars are injected at runtime
+if os.getenv("ENVIRONMENT", "development") != "production":
+    load_dotenv()
 
 class Settings:
     # Database
@@ -15,7 +17,12 @@ class Settings:
     # Redis
     REDIS_URL = os.getenv("REDIS_URL")
     REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
-    REDIS_SSL = os.getenv("REDIS_SSL") == 'true'
+    def _to_bool(val: str, default: bool = False) -> bool:
+        if val is None:
+            return default
+        return str(val).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+    REDIS_SSL = _to_bool(os.getenv("REDIS_SSL"), False)
     REDIS_DB = int(os.getenv("REDIS_DB", 0))
 
     # Security
@@ -26,7 +33,7 @@ class Settings:
 
     # App
     ENVIRONMENT = os.getenv("ENVIRONMENT")
-    DEBUG = os.getenv("DEBUG") == 'true'
+    DEBUG = _to_bool(os.getenv("DEBUG"), False)
     LOG_LEVEL = os.getenv("LOG_LEVEL")
     API_VERSION = os.getenv("API_VERSION")
 
@@ -39,7 +46,7 @@ class Settings:
     ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "").split(',')
 
     # Tracking
-    ENABLE_REAL_TRACKING = os.getenv("ENABLE_REAL_TRACKING") == 'true'
+    ENABLE_REAL_TRACKING = _to_bool(os.getenv("ENABLE_REAL_TRACKING"), False)
     TRACKING_API_ENDPOINT = os.getenv("TRACKING_API_ENDPOINT")
     TRACKING_SCRIPT_VERSION = os.getenv("TRACKING_SCRIPT_VERSION")
     GEOIP_PATH = os.getenv("GEOIP_PATH")
