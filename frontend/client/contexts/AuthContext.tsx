@@ -17,7 +17,7 @@ const transformUserData = (backendUser: any): User => {
   return {
     ...backendUser,
     role: mapBackendRoleToFrontend(backendUser.role),
-    name: backendUser.name || backendUser.full_name, // Handle both name formats
+    name: backendUser.name || backendUser.full_name || (backendUser.email ? String(backendUser.email).split('@')[0] : undefined),
     lastActive: new Date(backendUser.lastActive || backendUser.last_activity || new Date()),
     createdAt: new Date(backendUser.createdAt || backendUser.created_at || new Date())
   };
@@ -160,7 +160,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(userData),
+        body: JSON.stringify({
+          email: userData.email,
+          password: userData.password,
+          full_name: userData.name,
+          company: userData?.company
+        }),
       });
 
       if (!response.ok) {

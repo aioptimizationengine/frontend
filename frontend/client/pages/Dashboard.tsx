@@ -92,7 +92,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              Welcome back, {user?.name}
+              Welcome back, {user?.name || user?.email || 'there'}
             </h1>
             <p className="text-gray-600 mt-1">
               Monitor your AI optimization metrics and brand performance

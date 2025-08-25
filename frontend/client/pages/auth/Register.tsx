@@ -23,6 +23,7 @@ export default function Register() {
     password: '',
     confirmPassword: ''
   });
+  const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
@@ -60,6 +61,7 @@ export default function Register() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
 
     if (!isPasswordValid) {
       setError('Please meet all password requirements');
@@ -80,7 +82,7 @@ export default function Register() {
         company: formData.company || undefined,
         password: formData.password
       });
-      navigate('/dashboard');
+      setSuccess('Verification email sent. Please check your inbox to verify your account.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
@@ -107,6 +109,11 @@ export default function Register() {
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            {success && (
+              <Alert>
+                <AlertDescription>{success}</AlertDescription>
               </Alert>
             )}
             

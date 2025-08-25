@@ -64,6 +64,17 @@ logger = structlog.get_logger()
 
 # ==================== PYDANTIC MODELS (FIXED) ====================
 
+# Ensure optional optimization engine import is available at runtime
+def _ensure_engine_imported():
+    try:
+        global AIOptimizationEngine
+        if 'AIOptimizationEngine' not in globals():
+            from optimization_engine import AIOptimizationEngine as _AIOptimizationEngine
+            AIOptimizationEngine = _AIOptimizationEngine  # type: ignore
+    except Exception as e:
+        logger.error(f"Failed to import AIOptimizationEngine: {e}")
+        raise HTTPException(status_code=500, detail="Server misconfiguration: optimization engine unavailable")
+
 class BrandAnalysisRequest(BaseModel):
     """Brand analysis request - FIXED validation"""
     brand_name: str = Field(..., min_length=2, max_length=100, description="Brand name to analyze")
@@ -310,6 +321,7 @@ async def analyze_brand(
         # Initialize optimization engine
         # Respect both USE_REAL_TRACKING and ENABLE_REAL_TRACKING for compatibility with Railway vars
         use_real_tracking_env = os.getenv('USE_REAL_TRACKING') or os.getenv('ENABLE_REAL_TRACKING') or 'false'
+        _ensure_engine_imported()
         engine = AIOptimizationEngine({
             'anthropic_api_key': os.getenv('ANTHROPIC_API_KEY', 'test_key'),
             'openai_api_key': os.getenv('OPENAI_API_KEY', 'test_key'),
@@ -677,6 +689,7 @@ async def analyze_queries(
         )
         
         # Initialize optimization engine
+        _ensure_engine_imported()
         engine = AIOptimizationEngine({
             'anthropic_api_key': os.getenv('ANTHROPIC_API_KEY', 'test_key'),
             'openai_api_key': os.getenv('OPENAI_API_KEY', 'test_key'),
@@ -746,7 +759,11 @@ async def register_user(
         
         # Transform response to match frontend expectations
         frontend_result = {
-            "user": result.get("user"),
+            "user": {
+                **(result.get("user") or {}),
+                # Provide a friendly 'name' alongside 'full_name' for frontend convenience
+                "name": (result.get("user") or {}).get("full_name")
+            },
             # Some flows (e.g., email verification on sign-up) may not issue a token
             "token": result.get("access_token") or result.get("token"),
             "token_type": (result.get("token_type", "bearer")
@@ -754,6 +771,17 @@ async def register_user(
             "permissions": result.get("permissions", {}),
             "message": result.get("message")
         }
+
+        # If no token was issued by the service (e.g., email/password flow), create one now
+        if not frontend_result.get("token"):
+            try:
+                user_row = db.query(User).filter(User.email == request.email).first()
+                if user_row:
+                    access_token = OAuthManager().create_access_token(user_row)
+                    frontend_result["token"] = access_token
+                    frontend_result["token_type"] = "bearer"
+            except Exception as token_err:
+                logger.warning(f"Registration token creation failed: {token_err}")
         
         return StandardResponse(
             success=True,
