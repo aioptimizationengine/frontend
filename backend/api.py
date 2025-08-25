@@ -386,7 +386,7 @@ async def analyze_brand(
                 "brand_name": request.brand_name,
                 "analysis_results": analysis_results,
                 "summary": summary,
-                "competitors_overview": [],
+                "competitors_overview": analysis_result.get("competitors_overview", []),
                 "seo_analysis": seo_analysis,
                 # Provide full engine output for richer UI sections that can leverage it
                 "engine_output": analysis_result
@@ -583,9 +583,23 @@ async def analyze_brand(
         
     except Exception as e:
         logger.error(f"Brand analysis failed: {e}", exc_info=True)
+        # Provide a consistent error payload shape expected by frontend
         return StandardResponse(
             success=False,
-            error=f"Analysis failed: {str(e)}"
+            error=f"Analysis failed: {str(e)}",
+            data={
+                "analysis_id": None,
+                "brand_name": request.brand_name,
+                "analysis_results": [],
+                "summary": {
+                    "total_queries": 0,
+                    "brand_mentions": 0,
+                    "avg_position": 0,
+                    "visibility_score": 0
+                },
+                "competitors_overview": [],
+                "seo_analysis": {}
+            }
         )
 
 @app.post("/optimization-metrics", response_model=StandardResponse)

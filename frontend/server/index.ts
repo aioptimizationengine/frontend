@@ -13,7 +13,8 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
-const REQUEST_TIMEOUT = 60000; // 1 minute timeout
+// Increase proxy timeout; allow override via env PROXY_REQUEST_TIMEOUT_MS
+const REQUEST_TIMEOUT = Number(process.env.PROXY_REQUEST_TIMEOUT_MS || 180000); // default 3 minutes
 
 // Helper function to create proxy request with timeout
 const createProxyRequest = async (url: string, options: RequestInit = {}) => {
