@@ -75,6 +75,19 @@ def _ensure_engine_imported():
         logger.error(f"Failed to import AIOptimizationEngine: {e}")
         raise HTTPException(status_code=500, detail="Server misconfiguration: optimization engine unavailable")
 
+# Build auth configuration from environment
+def _get_auth_config() -> dict:
+    return {
+        'google_oauth_client_id': os.getenv('GOOGLE_OAUTH_CLIENT_ID'),
+        'google_oauth_client_secret': os.getenv('GOOGLE_OAUTH_CLIENT_SECRET'),
+        'jwt_secret_key': os.getenv('JWT_SECRET_KEY'),
+        'smtp_host': os.getenv('SMTP_HOST'),
+        'smtp_port': int(os.getenv('SMTP_PORT', '587')),
+        'smtp_user': os.getenv('SMTP_USER'),
+        'smtp_password': os.getenv('SMTP_PASSWORD'),
+        'notification_from_email': os.getenv('NOTIFICATION_FROM_EMAIL')
+    }
+
 class BrandAnalysisRequest(BaseModel):
     """Brand analysis request - FIXED validation"""
     brand_name: str = Field(..., min_length=2, max_length=100, description="Brand name to analyze")
@@ -759,8 +772,8 @@ async def register_user(
     try:
         user_service = UserService(
             UserManager(db),
-            OAuthManager(),
-            PasswordResetManager()
+            OAuthManager(_get_auth_config()),
+            PasswordResetManager(_get_auth_config())
         )
         
         result = await user_service.register_user(
@@ -818,8 +831,8 @@ async def login_user(
     try:
         user_service = UserService(
             UserManager(db),
-            OAuthManager(),
-            PasswordResetManager()
+            OAuthManager(_get_auth_config()),
+            PasswordResetManager(_get_auth_config())
         )
         
         result = await user_service.login_user(
