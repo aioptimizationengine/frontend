@@ -22,11 +22,19 @@ export const GoogleOAuth: React.FC<GoogleOAuthProps> = ({
   const { loginWithGoogle, isLoading } = useAuth();
 
   const handleSuccess = async (credentialResponse: any) => {
+    console.log('🎯 Google OAuth Success Callback Triggered');
+    console.log('Credential Response:', credentialResponse);
+    console.log('Credential Type:', typeof credentialResponse.credential);
+    console.log('Credential Length:', credentialResponse.credential?.length || 0);
+    
     try {
+      console.log('🚀 Calling loginWithGoogle function...');
       await loginWithGoogle(credentialResponse.credential);
+      console.log('✅ loginWithGoogle completed successfully');
       toast.success('Successfully signed in with Google!');
       onSuccess?.();
     } catch (error) {
+      console.error('❌ loginWithGoogle failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Google sign-in failed';
       toast.error(errorMessage);
       onError?.(errorMessage);
@@ -34,6 +42,7 @@ export const GoogleOAuth: React.FC<GoogleOAuthProps> = ({
   };
 
   const handleError = () => {
+    console.error('❌ Google OAuth Error Callback Triggered');
     const errorMessage = 'Google sign-in failed. Please try again.';
     toast.error(errorMessage);
     onError?.(errorMessage);

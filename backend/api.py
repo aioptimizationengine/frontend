@@ -869,6 +869,11 @@ async def get_current_user_info(
     current_user: User = Depends(get_current_user)
 ):
     """Get current user information from JWT token"""
+    logger.info("🔍 /api/auth/me endpoint called")
+    logger.info(f"User ID: {current_user.id}")
+    logger.info(f"User Email: {current_user.email}")
+    logger.info(f"User Role: {current_user.role}")
+    
     try:
         # Return user data directly (not wrapped in StandardResponse)
         # to match frontend AuthContext expectations
@@ -896,8 +901,14 @@ async def google_oauth_login(
     db: Session = Depends(get_db)
 ):
     """Google OAuth login endpoint"""
+    logger.info("🔐 Google OAuth login request received")
+    logger.info(f"Request body: {request}")
+    logger.info(f"OAuth token present: {bool(request.oauth_token)}")
+    logger.info(f"OAuth token length: {len(request.oauth_token) if request.oauth_token else 0}")
+    
     try:
         if not request.oauth_token:
+            logger.error("❌ OAuth token missing from request")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="OAuth token required for Google login"
@@ -923,6 +934,10 @@ async def google_oauth_login(
             "permissions": result.get("permissions", {}),
             "message": result.get("message")
         }
+        
+        logger.info("✅ Google OAuth login successful")
+        logger.info(f"User authenticated: {frontend_result.get('user', {}).get('email', 'Unknown')}")
+        logger.info(f"Token type: {frontend_result.get('token_type', 'Unknown')}")
         
         return StandardResponse(
             success=True,

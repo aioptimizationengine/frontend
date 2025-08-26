@@ -59,6 +59,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return;
       }
 
+      console.log('🔍 Checking auth status with token:', token?.substring(0, 20) + '...');
+      console.log('🔍 Calling /api/auth/me endpoint');
+      
       const response = await fetch('/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -66,12 +69,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         },
       });
 
+      console.log('📥 Auth check response:');
+      console.log('Status:', response.status);
+      console.log('Status Text:', response.statusText);
+      
       if (response.ok) {
         const userData = await response.json();
+        console.log('✅ Auth check successful, user data:', userData);
         setUser(transformUserData(userData));
       } else {
+        console.error('❌ Auth check failed:');
+        console.error('Status:', response.status);
+        console.error('Status Text:', response.statusText);
+        
         // Only remove token if it's a real auth failure, not a network error
         if (response.status === 401 || response.status === 404) {
+          console.log('🗑️ Removing invalid token from localStorage');
           localStorage.removeItem('authToken');
         }
       }
@@ -122,23 +135,52 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const loginWithGoogle = async (credential: string) => {
     setIsLoading(true);
+    
+    // Log the Google OAuth credentials being used
+    console.log('🔐 Google OAuth Login - Environment Variables:');
+    console.log('VITE_GOOGLE_CLIENT_ID:', (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || 'NOT_SET');
+    console.log('🔐 Google OAuth Login - Request Details:');
+    console.log('Endpoint:', '/api/auth/google');
+    console.log('Method:', 'POST');
+    console.log('Credential length:', credential?.length || 0);
+    console.log('Credential preview:', credential?.substring(0, 50) + '...');
+    
     try {
+      const requestBody = { oauth_token: credential };
+      console.log('📤 Request Body:', requestBody);
+      
       const response = await fetch('/api/auth/google', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ oauth_token: credential }),
+        body: JSON.stringify(requestBody),
       });
 
+      console.log('📥 Response received:');
+      console.log('Status:', response.status);
+      console.log('Status Text:', response.statusText);
+      console.log('Headers:', Object.fromEntries(response.headers.entries()));
+      
       if (!response.ok) {
+        console.error('❌ Google OAuth Login Failed:');
+        console.error('Response Status:', response.status);
+        console.error('Response Status Text:', response.statusText);
+        
         let errorMessage = 'Google login failed';
+        let errorDetails = null;
+        
         try {
           const error = await response.json();
+          errorDetails = error;
           errorMessage = error.message || error.error || errorMessage;
-        } catch {
+          console.error('Error Response Body:', error);
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
           errorMessage = response.statusText || errorMessage;
         }
+        
+        console.error('Final Error Message:', errorMessage);
         throw new Error(errorMessage);
       }
 
