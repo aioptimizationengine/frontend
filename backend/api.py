@@ -890,6 +890,52 @@ async def get_current_user_info(
             detail="Failed to get user information"
         )
 
+@app.post("/api/auth/google", response_model=StandardResponse)
+async def google_oauth_login(
+    request: UserLoginRequest,
+    db: Session = Depends(get_db)
+):
+    """Google OAuth login endpoint"""
+    try:
+        if not request.oauth_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OAuth token required for Google login"
+            )
+        
+        user_service = UserService(
+            UserManager(db),
+            OAuthManager(_get_auth_config()),
+            PasswordResetManager(_get_auth_config())
+        )
+        
+        result = await user_service.login_user(
+            oauth_token=request.oauth_token,
+            db=db
+        )
+        
+        # Transform response to match frontend expectations
+        frontend_result = {
+            "user": result.get("user"),
+            "token": result.get("access_token") or result.get("token"),
+            "token_type": (result.get("token_type", "bearer")
+                            if (result.get("access_token") or result.get("token")) else None),
+            "permissions": result.get("permissions", {}),
+            "message": result.get("message")
+        }
+        
+        return StandardResponse(
+            success=True,
+            data=frontend_result
+        )
+        
+    except Exception as e:
+        logger.error(f"Google OAuth login failed: {e}", exc_info=True)
+        return StandardResponse(
+            success=False,
+            error=f"Google OAuth login failed: {str(e)}"
+        )
+
 @app.post("/password-reset", response_model=StandardResponse)
 async def request_password_reset(
     request: PasswordResetRequest,
