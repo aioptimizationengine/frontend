@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { GoogleOAuthProvider } from "@react-oauth/google";
+import { useEffect } from "react";
 
 // Auth
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -42,9 +43,25 @@ const queryClient = new QueryClient();
 // Google OAuth Client ID - you'll need to replace this with your actual client ID
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'your-google-client-id-here';
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+// Log the client ID configuration
+console.log('🚀 App.tsx - Google OAuth Configuration:');
+console.log('🚀 import.meta.env.VITE_GOOGLE_CLIENT_ID:', import.meta.env.VITE_GOOGLE_CLIENT_ID);
+console.log('🚀 Final GOOGLE_CLIENT_ID:', GOOGLE_CLIENT_ID);
+console.log('🚀 All env variables:', import.meta.env);
+
+const App = () => {
+  console.log('🚀 App component rendering with GOOGLE_CLIENT_ID:', GOOGLE_CLIENT_ID);
+  
+  useEffect(() => {
+    console.log('🚀 App component mounted - Environment Variables:');
+    console.log('🚀 VITE_GOOGLE_CLIENT_ID:', import.meta.env.VITE_GOOGLE_CLIENT_ID);
+    console.log('🚀 GOOGLE_CLIENT_ID constant:', GOOGLE_CLIENT_ID);
+    console.log('🚀 All env variables:', import.meta.env);
+  }, []);
+  
+  return (
+    <QueryClientProvider client={queryClient}>
+      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -174,6 +191,7 @@ const App = () => (
       </TooltipProvider>
     </GoogleOAuthProvider>
   </QueryClientProvider>
-);
+    );
+};
 
 createRoot(document.getElementById("root")!).render(<App />);

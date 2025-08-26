@@ -20,6 +20,11 @@ export const GoogleOAuth: React.FC<GoogleOAuthProps> = ({
   className = '',
 }) => {
   const { loginWithGoogle, isLoading } = useAuth();
+  
+  // Log the client ID when component renders
+  console.log('🔍 GoogleOAuth Component Rendered');
+  console.log('🔍 VITE_GOOGLE_CLIENT_ID from env:', (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || 'NOT_SET');
+  console.log('🔍 All env variables:', (import.meta as any).env);
 
   const handleSuccess = async (credentialResponse: any) => {
     console.log('🎯 Google OAuth Success Callback Triggered');
@@ -50,6 +55,9 @@ export const GoogleOAuth: React.FC<GoogleOAuthProps> = ({
 
   return (
     <div className={className}>
+      <div style={{ marginBottom: '10px', fontSize: '12px', color: '#666' }}>
+        Client ID: {(import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || 'NOT_SET'}
+      </div>
       <GoogleLogin
         onSuccess={handleSuccess}
         onError={handleError}
