@@ -11,4 +11,7 @@ restartPolicyType = "always"
 [variables]
 PORT = "3000"
 NODE_ENV = "production"
+VITE_GOOGLE_CLIENT_ID = "${{VITE_GOOGLE_CLIENT_ID}}"
+VITE_API_URL = "${{VITE_API_URL}}"
+VITE_ENVIRONMENT = "${{VITE_ENVIRONMENT}}"
 
