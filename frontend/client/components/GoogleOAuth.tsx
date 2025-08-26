@@ -23,8 +23,8 @@ export const GoogleOAuth: React.FC<GoogleOAuthProps> = ({
   
   // Log the client ID when component renders
   console.log('🔍 GoogleOAuth Component Rendered');
-  console.log('🔍 VITE_GOOGLE_CLIENT_ID from env:', (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || 'NOT_SET');
-  console.log('🔍 All env variables:', (import.meta as any).env);
+  console.log('🔍 VITE_GOOGLE_CLIENT_ID from env:', process.env?.VITE_GOOGLE_CLIENT_ID || 'NOT_SET');
+  console.log('🔍 All env variables:', process.env);
 
   const handleSuccess = async (credentialResponse: any) => {
     console.log('🎯 Google OAuth Success Callback Triggered');
@@ -56,7 +56,7 @@ export const GoogleOAuth: React.FC<GoogleOAuthProps> = ({
   return (
     <div className={className}>
       <div style={{ marginBottom: '10px', fontSize: '12px', color: '#666' }}>
-        Client ID: {(import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || 'NOT_SET'}
+        Client ID: {process.env?.VITE_GOOGLE_CLIENT_ID || 'NOT_SET'}
       </div>
       <GoogleLogin
         onSuccess={handleSuccess}

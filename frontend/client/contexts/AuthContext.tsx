@@ -138,7 +138,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     // Log the Google OAuth credentials being used
     console.log('🔐 Google OAuth Login - Environment Variables:');
-    console.log('VITE_GOOGLE_CLIENT_ID:', (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || 'NOT_SET');
+    console.log('VITE_GOOGLE_CLIENT_ID:', process.env?.VITE_GOOGLE_CLIENT_ID || 'NOT_SET');
     console.log('🔐 Google OAuth Login - Request Details:');
     console.log('Endpoint:', '/api/auth/google');
     console.log('Method:', 'POST');
