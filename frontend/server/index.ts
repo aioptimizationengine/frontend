@@ -156,13 +156,16 @@ export function createApp() {
 
   app.post("/api/auth/google", async (req, res) => {
     // Google OAuth is handled through the login endpoint with oauth_token
-    const { credential } = req.body;
+    const { oauth_token } = req.body;
+    console.log('🔍 Google OAuth Request Body:', req.body);
+    console.log('🔍 OAuth Token:', oauth_token);
+    
     await handleProxyResponse(
       res,
       createProxyRequest('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({
-          oauth_token: credential
+          oauth_token: oauth_token
         })
       }),
       "Google authentication failed"
