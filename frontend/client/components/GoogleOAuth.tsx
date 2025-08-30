@@ -55,9 +55,6 @@ export const GoogleOAuth: React.FC<GoogleOAuthProps> = ({
 
   return (
     <div className={className}>
-      <div style={{ marginBottom: '10px', fontSize: '12px', color: '#666' }}>
-        Client ID: {process.env?.VITE_GOOGLE_CLIENT_ID || 'NOT_SET'}
-      </div>
       <GoogleLogin
         onSuccess={handleSuccess}
         onError={handleError}
