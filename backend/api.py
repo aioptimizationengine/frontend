@@ -383,6 +383,66 @@ async def analyze_brand(
         }
 
         processing_time = time.time() - analysis_start
+        
+        # Save analysis to database
+        try:
+            db = get_database_session()
+            
+            # Find or create brand
+            brand = db.query(Brand).filter(Brand.name == request.brand_name).first()
+            if not brand:
+                brand = Brand(
+                    name=request.brand_name,
+                    website_url=request.website_url,
+                    categories=request.product_categories,
+                    industry=""
+                )
+                db.add(brand)
+                db.commit()
+                db.refresh(brand)
+                
+                # Create user-brand association if user exists
+                if current_user:
+                    user_brand = UserBrand(
+                        user_id=current_user.id,
+                        brand_id=brand.id,
+                        role='admin'
+                    )
+                    db.add(user_brand)
+                    db.commit()
+            
+            # Create analysis record with proper metrics structure for dashboard
+            metrics_data = {
+                **analysis_result.get("optimization_metrics", {}),
+                "queries": semantic_queries,
+                "brand_mentions": summary.get("brand_mentions", 0),
+                "visibility_score": summary.get("visibility_score", 0.0),
+                "total_queries": summary.get("total_queries", 0),
+                "competitors": analysis_result.get("competitors_overview", [])
+            }
+            
+            analysis = Analysis(
+                brand_id=brand.id,
+                status="completed",
+                analysis_type="comprehensive",
+                data_source="real" if use_real_tracking_env.lower() in {"1", "true", "yes", "y", "on"} else "simulated",
+                metrics=metrics_data,
+                recommendations=analysis_result.get("priority_recommendations", []),
+                processing_time=processing_time,
+                started_at=datetime.fromtimestamp(analysis_start),
+                completed_at=datetime.now()
+            )
+            db.add(analysis)
+            db.commit()
+            db.refresh(analysis)
+            
+            analysis_id = str(analysis.id)
+            logger.info(f"Analysis saved to database with ID: {analysis_id}")
+            
+        except Exception as db_error:
+            logger.error(f"Failed to save analysis to database: {db_error}")
+            analysis_id = f"analysis_{int(time.time())}"  # Fallback ID
+        
         logger.info(
             "brand_analysis_completed",
             brand_name=request.brand_name,
@@ -393,7 +453,7 @@ async def analyze_brand(
         return StandardResponse(
             success=True,
             data={
-                "analysis_id": f"analysis_{int(time.time())}",
+                "analysis_id": analysis_id,
                 "brand_name": request.brand_name,
                 "analysis_results": analysis_results,
                 "summary": summary,
@@ -402,194 +462,6 @@ async def analyze_brand(
                 # Provide full engine output for richer UI sections that can leverage it
                 "engine_output": analysis_result
             }
-        )
-        
-        # Generate SEO analysis prompt for Claude
-        seo_prompt = f"""
-        As an expert SEO analyst, please analyze the following website and provide a comprehensive SEO analysis.
-        
-        Brand: {request.brand_name}
-        Website: {request.website_url or 'Not provided'}
-        Product Categories: {', '.join(request.product_categories) or 'Not specified'}
-        
-        Please provide your analysis in the following JSON format:
-        {{
-            "whats_there": [
-                "List of 3-5 positive SEO elements already present on the site"
-            ],
-            "whats_needed": [
-                "List of 3-5 critical SEO improvements needed"
-            ],
-            "whats_perfect": [
-                "List of 1-3 things the site is doing exceptionally well"
-            ],
-            "priority_recommendations": [
-                {{
-                    "title": "High-impact recommendation title",
-                    "description": "Detailed description of the recommendation",
-                    "priority": "high/medium/low",
-                    "impact": "Expected impact on SEO (e.g., 'High', 'Medium', 'Low')",
-                    "effort": "Estimated effort required (e.g., 'Low', 'Medium', 'High')",
-                    "timeline": "Recommended timeline (e.g., 'Immediate', '1-2 weeks', '1-3 months')"
-                }}
-            ],
-            "roadmap": [
-                {{
-                    "phase": "Phase 1: Quick Wins (0-2 weeks)",
-                    "items": ["List of actionable items for this phase"]
-                }},
-                {{
-                    "phase": "Phase 2: Core Improvements (2-4 weeks)",
-                    "items": ["List of actionable items for this phase"]
-                }},
-                {{
-                    "phase": "Phase 3: Advanced Optimization (1-3 months)",
-                    "items": ["List of actionable items for this phase"]
-                }}
-            ],
-            "summary": "Brief 2-3 sentence summary of the site's SEO health"
-        }}
-        
-        Be specific, actionable, and professional in your recommendations. 
-        Focus on technical SEO, content quality, and user experience improvements.
-        """
-        
-        # Get SEO analysis from Claude
-        from llm_clients import call_anthropic
-        seo_analysis_text = await call_anthropic(
-            seo_prompt,
-            model="claude-3-opus-20240229",
-            max_tokens=1500
-        )
-        
-        # Parse the JSON response
-        try:
-            seo_analysis = json.loads(seo_analysis_text)
-        except json.JSONDecodeError:
-            # Fallback to default values if parsing fails
-            seo_analysis = {
-                "whats_there": ["Mobile-friendly design", "Basic meta tags"],
-                "whats_needed": ["Improve page load speed", "Add more descriptive alt tags"],
-                "whats_perfect": ["Clean URL structure"],
-                "summary": "The website has a solid foundation but needs optimization in key areas."
-            }
-        
-        # Generate semantic queries based on brand and categories
-        semantic_queries = []
-        if request.brand_name and request.product_categories:
-            for category in request.product_categories[:3]:  # Limit to top 3 categories
-                semantic_queries.append(f"{request.brand_name} {category} review")
-                semantic_queries.append(f"best {category} like {request.brand_name}")
-        
-        # If no categories, use brand name only
-        if not semantic_queries and request.brand_name:
-            semantic_queries = [
-                f"{request.brand_name} reviews",
-                f"best {request.brand_name} alternatives",
-                f"{request.brand_name} features"
-            ]
-        
-        # Generate analysis results for each query
-        analysis_results = []
-        for i, query in enumerate(semantic_queries[:5], 1):
-            analysis_results.append({
-                "query": query,
-                "response": f"Analysis shows {request.brand_name} has strong presence for '{query}'",
-                "source_attribution": {
-                    "mentioned": True,
-                    "position": i
-                }
-            })
-        
-        processing_time = time.time() - analysis_start
-        
-        logger.info(
-            "brand_analysis_completed",
-            brand_name=request.brand_name,
-            processing_time=processing_time,
-            success=True
-        )
-        
-        return StandardResponse(
-            success=True,
-            data={
-                "analysis_id": f"analysis_{int(time.time())}",
-                "brand_name": request.brand_name,
-                "analysis_results": analysis_results,
-                "summary": {
-                    "total_queries": len(semantic_queries),
-                    "brand_mentions": len([q for q in semantic_queries if request.brand_name.lower() in q.lower()]),
-                    "avg_position": 2.3,
-                    "visibility_score": 0.65 + (0.35 * (1 / len(semantic_queries) if semantic_queries else 0))
-                },
-                "competitors_overview": [
-                    {
-                        "competitor": comp,
-                        "mention_count": 0,  # Real data would come from actual analysis
-                        "avg_position": 0.0
-                    }
-                    for comp in (request.competitor_names or [])
-                ] if request.competitor_names else [],
-                "seo_analysis": {
-                    "whats_there": seo_analysis.get("whats_there", [
-                        "Mobile-friendly design",
-                        "Basic meta tags present"
-                    ]),
-                    "whats_needed": seo_analysis.get("whats_needed", [
-                        "Improve page load speed",
-                        "Enhance meta descriptions"
-                    ]),
-                    "whats_perfect": seo_analysis.get("whats_perfect", [
-                        "Clean URL structure"
-                    ]),
-                    "priority_recommendations": seo_analysis.get("priority_recommendations", [
-                        {
-                            "title": "Optimize Page Load Speed",
-                            "description": "Improve website loading time by compressing images and leveraging browser caching.",
-                            "priority": "high",
-                            "impact": "High",
-                            "effort": "Medium",
-                            "timeline": "1-2 weeks"
-                        },
-                        {
-                            "title": "Enhance Meta Descriptions",
-                            "description": "Create unique and compelling meta descriptions for all key pages.",
-                            "priority": "medium",
-                            "impact": "Medium",
-                            "effort": "Low",
-                            "timeline": "1 week"
-                        }
-                    ]),
-                    "roadmap": seo_analysis.get("roadmap", [
-                        {
-                            "phase": "Phase 1: Quick Wins (0-2 weeks)",
-                            "items": [
-                                "Fix broken links and redirects",
-                                "Optimize meta titles and descriptions",
-                                "Improve image alt text"
-                            ]
-                        },
-                        {
-                            "phase": "Phase 2: Core Improvements (2-4 weeks)",
-                            "items": [
-                                "Implement structured data markup",
-                                "Improve internal linking structure",
-                                "Optimize for mobile usability"
-                            ]
-                        },
-                        {
-                            "phase": "Phase 3: Advanced Optimization (1-3 months)",
-                            "items": [
-                                "Develop content strategy based on keyword research",
-                                "Implement advanced schema markup",
-                                "Optimize for voice search and featured snippets"
-                            ]
-                        }
-                    ]),
-                    "summary": seo_analysis.get("summary", "The website has a solid foundation but needs optimization in key areas to improve search visibility and user experience.")
-                }
-            },
-            timestamp=datetime.now().isoformat()
         )
         
     except HTTPException as he:
