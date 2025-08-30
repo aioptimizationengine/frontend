@@ -1597,10 +1597,9 @@ class AIOptimizationEngine:
     async def _test_llm_responses(self, brand_name: str, queries: List[str]) -> Dict[str, Any]:
         """Test LLM responses for brand mentions - FIXED"""
         try:
-            # Mock LLM responses for testing (when API keys are test keys)
-            if (not self.anthropic_client and not self.openai_client) or \
-               self.config.get('anthropic_api_key') == 'test_key':
-                return self._mock_llm_responses(brand_name, queries)
+            # Require valid API clients - no mock responses in production
+            if not self.anthropic_client and not self.openai_client:
+                raise ValueError("No valid API clients available. Please configure ANTHROPIC_API_KEY or OPENAI_API_KEY with valid keys.")
             
             results = {
                 'anthropic_responses': [],
@@ -1675,7 +1674,7 @@ class AIOptimizationEngine:
             
         except Exception as e:
             logger.error(f"LLM testing failed: {e}")
-            return self._mock_llm_responses(brand_name, queries)
+            raise Exception(f"LLM testing failed and no valid API clients available: {e}")
 
     def _mock_llm_responses(self, brand_name: str, queries: List[str]) -> Dict[str, Any]:
         """Mock LLM responses for testing"""
