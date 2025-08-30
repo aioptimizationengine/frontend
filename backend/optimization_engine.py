@@ -392,12 +392,13 @@ class AIOptimizationEngine:
         
         try:
             # 1. Chunk Retrieval Frequency - Measures how often content chunks are retrieved
-            metrics.chunk_retrieval_frequency = await self._calculate_chunk_retrieval_frequency(content_chunks)
+            metrics.chunk_retrieval_frequency = self._calculate_chunk_retrieval_frequency(content_chunks)
             
             # 2. Embedding Relevance Score - Semantic similarity between queries and content
             metrics.embedding_relevance_score = self._calculate_embedding_relevance(content_chunks, queries)
             
             # 3. Attribution Rate - Percentage of responses that mention the brand
+{{ ... }}
             total_responses = max(1, llm_results.get('total_responses', 1))
             brand_mentions = llm_results.get('brand_mentions', 0)
             metrics.attribution_rate = brand_mentions / total_responses
@@ -454,7 +455,7 @@ class AIOptimizationEngine:
             metrics.performance_grade = "E"  # Error grade
             return metrics
 
-    async def _calculate_chunk_retrieval_frequency(self, chunks: List[ContentChunk]) -> float:
+    def _calculate_chunk_retrieval_frequency(self, chunks: List[ContentChunk]) -> float:
         """Calculate chunk retrieval frequency"""
         if not chunks:
             return 0.0
@@ -1676,34 +1677,6 @@ class AIOptimizationEngine:
             logger.error(f"LLM testing failed: {e}")
             raise Exception(f"LLM testing failed and no valid API clients available: {e}")
 
-    def _mock_llm_responses(self, brand_name: str, queries: List[str]) -> Dict[str, Any]:
-        """Mock LLM responses for testing"""
-        responses = []
-        brand_mentions = 0
-        
-        for i, query in enumerate(queries[:10]):  # Limit to 10 for testing
-            # Simulate some responses mentioning the brand
-            mentions_brand = (i % 2 == 0)  # Every other response mentions brand
-            
-            if mentions_brand:
-                response_text = f"{brand_name} is a good company that provides quality products and services."
-                brand_mentions += 1
-            else:
-                response_text = "There are many companies in this industry that offer various solutions."
-            
-            responses.append({
-                'query': query,
-                'response': response_text,
-                'brand_mentioned': mentions_brand,  # Fixed key name
-                'has_brand_mention': mentions_brand
-            })
-        
-        return {
-            'anthropic_responses': responses,
-            'brand_mentions': brand_mentions,
-            'total_responses': len(responses),
-            'platform_breakdown': {'anthropic': len(responses), 'openai': 0}
-        }
 
     # ==================== RECOMMENDATION METHODS ====================
 

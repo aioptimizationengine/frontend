@@ -32,13 +32,10 @@ async def get_current_user_optional() -> Optional[User]:
     """Get current user but don't fail if not authenticated"""
     try:
         return await get_current_user()
-    except:
-        # Create a mock user for testing
-        mock_user = User()
-        mock_user.id = "test-user-id"
-        mock_user.email = "test@example.com"
-        mock_user.role = "client"
-        return mock_user
+    except Exception as e:
+        # No fallback to mock user - require valid authentication
+        raise HTTPException(status_code=401, detail="Authentication required")
+
 from auth_oauth import OAuthManager, PasswordResetManager
 from user_management import UserManager, UserService
 
@@ -527,11 +524,11 @@ async def analyze_brand(
                 "competitors_overview": [
                     {
                         "competitor": comp,
-                        "mention_count": 8 + i * 2,  # Just some mock data
-                        "avg_position": 3.0 + (i * 0.5)
+                        "mention_count": 0,  # Real data would come from actual analysis
+                        "avg_position": 0.0
                     }
-                    for i, comp in enumerate(request.competitor_names or ["Competitor A", "Competitor B"][:3])
-                ],
+                    for comp in (request.competitor_names or [])
+                ] if request.competitor_names else [],
                 "seo_analysis": {
                     "whats_there": seo_analysis.get("whats_there", [
                         "Mobile-friendly design",
