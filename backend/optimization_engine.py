@@ -398,7 +398,6 @@ class AIOptimizationEngine:
             metrics.embedding_relevance_score = self._calculate_embedding_relevance(content_chunks, queries)
             
             # 3. Attribution Rate - Percentage of responses that mention the brand
-{{ ... }}
             total_responses = max(1, llm_results.get('total_responses', 1))
             brand_mentions = llm_results.get('brand_mentions', 0)
             metrics.attribution_rate = brand_mentions / total_responses
