@@ -409,11 +409,50 @@ async def analyze_brand(
             # Find or create brand
             brand = db.query(Brand).filter(Brand.name == request.brand_name).first()
             if not brand:
+                # Infer industry from product categories if available
+                inferred_industry = ""
+                if request.product_categories:
+                    # Simple industry inference from first category
+                    first_category = request.product_categories[0].lower()
+                    industry_mapping = {
+                        'software': 'Technology',
+                        'tech': 'Technology', 
+                        'app': 'Technology',
+                        'saas': 'Technology',
+                        'clothing': 'Fashion & Retail',
+                        'fashion': 'Fashion & Retail',
+                        'retail': 'Fashion & Retail',
+                        'food': 'Food & Beverage',
+                        'restaurant': 'Food & Beverage',
+                        'beverage': 'Food & Beverage',
+                        'health': 'Healthcare',
+                        'medical': 'Healthcare',
+                        'fitness': 'Healthcare',
+                        'finance': 'Financial Services',
+                        'banking': 'Financial Services',
+                        'insurance': 'Financial Services',
+                        'education': 'Education',
+                        'learning': 'Education',
+                        'automotive': 'Automotive',
+                        'car': 'Automotive',
+                        'travel': 'Travel & Hospitality',
+                        'hotel': 'Travel & Hospitality',
+                        'real estate': 'Real Estate',
+                        'property': 'Real Estate'
+                    }
+                    
+                    for keyword, industry in industry_mapping.items():
+                        if keyword in first_category:
+                            inferred_industry = industry
+                            break
+                    
+                    if not inferred_industry:
+                        inferred_industry = request.product_categories[0].title()
+                
                 brand = Brand(
                     name=request.brand_name,
                     website_url=request.website_url,
-                    categories=request.product_categories,
-                    industry=""
+                    industry=inferred_industry
                 )
                 db.add(brand)
                 db.commit()
@@ -433,6 +472,7 @@ async def analyze_brand(
             metrics_data = {
                 **optimization_metrics,
                 "queries": semantic_queries,
+                "product_categories": request.product_categories,
                 "brand_mentions": summary.get("brand_mentions", 0),
                 "visibility_score": summary.get("visibility_score", 0.0),
                 "total_queries": summary.get("total_queries", 0),
@@ -462,6 +502,7 @@ async def analyze_brand(
             logger.info(f"Analysis saved to database with ID: {analysis_id}")
             
         except Exception as db_error:
+            db.rollback()
             logger.error(f"Failed to save analysis to database: {db_error}")
             analysis_id = f"analysis_{int(time.time())}"  # Fallback ID
         
@@ -1006,7 +1047,7 @@ async def create_brand(
                 "description": "",  # Default empty string for compatibility
                 "website": new_brand.website_url,
                 "industry": new_brand.industry,
-                "categories": [],  # Default empty list for compatibility
+                "product_categories": [],  # Default empty list for compatibility
                 "userId": str(current_user.id),
                 "createdAt": new_brand.created_at.isoformat(),
                 "updatedAt": new_brand.updated_at.isoformat()
@@ -1062,8 +1103,6 @@ async def update_brand(
             brand.website_url = request['website']
         if 'industry' in request:
             brand.industry = request['industry']
-        if 'categories' in request:
-            brand.categories = request['categories']
         
         db.commit()
         db.refresh(brand)
@@ -1076,7 +1115,7 @@ async def update_brand(
                 "description": brand.description,
                 "website": brand.website_url,
                 "industry": brand.industry,
-                "categories": brand.categories,
+                "product_categories": [],  # Categories stored in Analysis.metrics
                 "updatedAt": brand.updated_at.isoformat()
             },
             message="Brand updated successfully"

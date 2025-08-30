@@ -262,18 +262,18 @@ export default function Brands() {
                 <div className="flex items-center text-sm text-gray-500">
                   <Globe className="h-4 w-4 mr-1.5" />
                   <a 
-                    href={brand.website} 
+                    href={brand.website_url} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="text-blue-600 hover:underline"
                   >
                     {(() => {
                       try {
-                        if (!brand.website) return 'No website';
-                        const url = new URL(brand.website.startsWith('http') ? brand.website : `https://${brand.website}`);
+                        if (!brand.website_url) return 'No website';
+                        const url = new URL(brand.website_url.startsWith('http') ? brand.website_url : `https://${brand.website_url}`);
                         return url.hostname.replace('www.', '');
                       } catch (e) {
-                        console.warn('Invalid website URL:', brand.website);
+                        console.warn('Invalid website URL:', brand.website_url);
                         return 'Invalid URL';
                       }
                     })()}
