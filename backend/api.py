@@ -57,21 +57,10 @@ def sanitize_for_json(obj: Any) -> Any:
 # Essential imports - must work for API to function
 from database import get_db, check_database_health, SessionLocal
 from db_models import Brand, User, Analysis, UserRole, UserBrand
-from models import StandardResponse, ErrorResponse, User, Brand, Analysis, UserBrand
-from auth_utils import get_current_user_optional
 from models import StandardResponse, ErrorResponse
-from auth_utils import get_current_user
-from typing import Optional
+from auth_utils import get_current_user_optional, get_current_user
 
-# Optional user dependency for testing
-async def get_current_user_optional() -> Optional[User]:
-    """Get current user but don't fail if not authenticated"""
-    try:
-        return await get_current_user()
-    except Exception as e:
-        # Return None for testing - authentication is optional
-        logger.warning(f"Authentication failed, proceeding without user: {e}")
-        return None
+# Import optional modules
 
 from auth_oauth import OAuthManager, PasswordResetManager
 from user_management import UserManager, UserService
