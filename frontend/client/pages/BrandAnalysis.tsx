@@ -858,25 +858,25 @@ export default function BrandAnalysis() {
                       <div className="bg-blue-50 p-3 rounded-lg">
                         <div className="text-sm text-blue-600">Total Queries</div>
                         <div className="text-2xl font-bold text-blue-900">
-                          {analysisData.data?.summary?.total_queries || 'N/A'}
+                          {analysisData.data?.summary?.total_queries || 0}
                         </div>
                       </div>
                       <div className="bg-green-50 p-3 rounded-lg">
                         <div className="text-sm text-green-600">Brand Mentions</div>
                         <div className="text-2xl font-bold text-green-900">
-                          {analysisData.data.summary.brand_mentions}
+                          {analysisData.data?.summary?.brand_mentions || 0}
                         </div>
                       </div>
                       <div className="bg-purple-50 p-3 rounded-lg">
                         <div className="text-sm text-purple-600">Avg Position</div>
                         <div className="text-2xl font-bold text-purple-900">
-                          {analysisData.data.summary.avg_position.toFixed(1)}
+                          {analysisData.data?.summary?.avg_position ? Number(analysisData.data.summary.avg_position).toFixed(1) : 'N/A'}
                         </div>
                       </div>
                       <div className="bg-orange-50 p-3 rounded-lg">
                         <div className="text-sm text-orange-600">Visibility Score</div>
                         <div className="text-2xl font-bold text-orange-900">
-                          {(analysisData.data.summary.visibility_score * 100).toFixed(1)}%
+                          {analysisData.data?.summary?.visibility_score !== undefined ? Number(analysisData.data.summary.visibility_score).toFixed(1) + '%' : 'N/A'}
                         </div>
                       </div>
                     </div>

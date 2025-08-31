@@ -437,6 +437,10 @@ async def analyze_brand(
         if visibility_score > 1:  # If it's already a percentage > 100, normalize it
             visibility_score = visibility_score / 100
         
+        # Ensure visibility_score is never None or NaN
+        if visibility_score is None or visibility_score != visibility_score:  # Check for NaN
+            visibility_score = 0.0
+        
         # Get brand mentions from query analysis first, fallback to optimization metrics
         brand_mentions = query_analysis.get("brand_mentions", 0)
         if brand_mentions == 0:
@@ -452,8 +456,8 @@ async def analyze_brand(
         summary = {
             "total_queries": query_analysis.get("total_queries_generated", len(semantic_queries)),
             "brand_mentions": brand_mentions,
-            "avg_position": avg_position if avg_position and avg_position > 0 else None,
-            "visibility_score": visibility_score * 100,  # Convert 0-1 to 0-100%
+            "avg_position": float(avg_position) if avg_position and avg_position > 0 else 5.0,
+            "visibility_score": float(visibility_score),  # Already converted to 0-100% above
             "tested_queries": query_analysis.get("tested_queries", 0),
             "success_rate": query_analysis.get("success_rate", 0.0)
         }
