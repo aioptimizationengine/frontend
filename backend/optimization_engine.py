@@ -1338,34 +1338,98 @@ class AIOptimizationEngine:
         return contexts.get(industry, 'competitive market environment')
 
     async def _generate_semantic_queries(self, brand_name: str, product_categories: List[str]) -> List[str]:
-        """Generate semantic queries using LLMs only (no heuristic fallback)."""
-        try:
-            # Research brand context to enrich the LLM prompt
-            brand_context = await self._research_brand_context(brand_name, product_categories)
-            logger.info(
-                f"Generating LLM-only queries for {brand_name} (industry={brand_context.get('industry')}, type={brand_context.get('brand_type')})"
-            )
+        """Generate semantic queries.
 
-            # Require an LLM client
+        Behavior:
+        - If config llm_only_queries=True, strictly use LLM and raise on failure/empty.
+        - Otherwise, attempt LLM first; if unavailable or empty, fall back to heuristic generation
+          using industry, brand type, and product categories (previous working behavior).
+        """
+        # Determine mode from config (default: allow fallback)
+        llm_only = bool(self.config.get('llm_only_queries', False))
+
+        # Research brand context to enrich prompts and heuristics
+        brand_context = await self._research_brand_context(brand_name, product_categories)
+        industry = (brand_context.get('industry') or 'general business').lower()
+        brand_type = brand_context.get('brand_type', 'general')
+
+        logger.info(
+            "generating_queries",
+            brand=brand_name,
+            industry=industry,
+            brand_type=brand_type,
+            llm_only=llm_only,
+        )
+
+        # If strictly LLM-only, enforce clients and non-empty results
+        if llm_only:
             if not (self.anthropic_client or self.openai_client):
                 raise RuntimeError("LLM query generation requires configured Anthropic or OpenAI client")
-
-            # Generate via LLM only
             llm_queries = await self._llm_generate_queries(brand_name, product_categories, brand_context)
             if not llm_queries:
                 raise RuntimeError("LLM query generation returned no queries")
-
-            # Deduplicate and cap at 60
-            unique_queries = list(
-                dict.fromkeys([q.strip() for q in llm_queries if isinstance(q, str) and q.strip()])
-            )[:60]
-            logger.info(f"Generated {len(unique_queries)} LLM queries for {brand_name}")
+            unique_queries = list(dict.fromkeys([q.strip() for q in llm_queries if isinstance(q, str) and q.strip()]))[:60]
+            logger.info(f"Generated {len(unique_queries)} LLM queries (strict) for {brand_name}")
             return unique_queries
 
+        # Best-effort: try LLM first, then heuristic fallback
+        queries: List[str] = []
+        try:
+            if (self.anthropic_client or self.openai_client):
+                llm_queries = await self._llm_generate_queries(brand_name, product_categories, brand_context)
+                if llm_queries:
+                    queries.extend(llm_queries)
         except Exception as e:
-            logger.error(f"LLM-only query generation failed: {e}")
-            # No fallback; surface error to caller
-            raise
+            logger.warning(f"LLM query generation failed, falling back to heuristics: {e}")
+
+        # Heuristic fallback if needed (revert-style behavior)
+        if not queries:
+            base: List[str] = []
+            # Industry-specific seeds
+            try:
+                base.extend(self._generate_industry_specific_queries(brand_name, industry, brand_type))
+            except Exception:
+                pass
+
+            # Generic brand queries
+            generic = [
+                f"What is {brand_name}?",
+                f"Tell me about {brand_name}",
+                f"{brand_name} pricing",
+                f"{brand_name} reviews",
+                f"{brand_name} features",
+                f"{brand_name} benefits",
+                f"{brand_name} vs competitors",
+                f"Best alternatives to {brand_name}",
+                f"Is {brand_name} good?",
+                f"How does {brand_name} work?",
+            ]
+            base.extend(generic)
+
+            # Category-expanded queries
+            cats = [c for c in (product_categories or []) if isinstance(c, str) and c.strip()]
+            for cat in cats:
+                c = cat.strip()
+                base.extend([
+                    f"{brand_name} {c}",
+                    f"{brand_name} {c} pricing",
+                    f"{brand_name} {c} reviews",
+                    f"{brand_name} {c} vs alternatives",
+                    f"Is {brand_name} good for {c}?",
+                    f"{brand_name} {c} integration",
+                ])
+
+            # Intent variants
+            intents = ["setup", "tutorial", "docs", "comparison", "support", "limitations", "security", "API", "case studies"]
+            for intent in intents:
+                base.append(f"{brand_name} {intent}")
+
+            queries = base
+
+        # Deduplicate and cap at 60
+        unique_queries = list(dict.fromkeys([q.strip() for q in queries if isinstance(q, str) and q.strip()]))[:60]
+        logger.info(f"Generated {len(unique_queries)} queries for {brand_name} (mode={'llm_only' if llm_only else 'hybrid'})")
+        return unique_queries
 
     async def _llm_generate_queries(self, brand_name: str, product_categories: List[str], brand_context: Dict[str, Any]) -> List[str]:
         """Use Anthropic/OpenAI to propose semantic queries for the brand. LLM-only; no heuristic fallback."""
