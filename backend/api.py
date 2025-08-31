@@ -380,6 +380,39 @@ async def analyze_brand(
             }
         ]
         
+        # Build competitors overview: if engine returned only names or nothing, enrich here
+        competitors_overview = analysis_result.get("competitors_overview", [])
+        try:
+            # If it's a list of strings (names) or empty, and request has competitor names, compute lightweight stats
+            if request.competitor_names:
+                needs_enrich = (
+                    not competitors_overview
+                    or (isinstance(competitors_overview, list) and competitors_overview and isinstance(competitors_overview[0], str))
+                )
+                if needs_enrich:
+                    enriched = []
+                    # Limit to first 5 competitors to control latency
+                    for comp_name in (request.competitor_names or [])[:5]:
+                        try:
+                            comp_result = await engine.analyze_queries(
+                                brand_name=comp_name,
+                                product_categories=request.product_categories
+                            )
+                            enriched.append({
+                                "name": comp_name,
+                                "brand_mentions": comp_result.get("brand_mentions", 0),
+                                "success_rate": comp_result.get("success_rate", 0.0),
+                                "avg_position": (comp_result.get("summary_metrics", {}) or {}).get("avg_position", 5.0),
+                                "tested_queries": comp_result.get("tested_queries", 0)
+                            })
+                        except Exception as ce:
+                            logger.warning(f"competitor_analysis_failed: {comp_name}", error=str(ce))
+                            enriched.append({"name": comp_name, "error": str(ce)})
+                    competitors_overview = enriched
+        except Exception as ce:
+            logger.warning("competitors_overview_enrichment_failed", error=str(ce))
+            # keep original competitors_overview as-is
+        
         # Create summary for dashboard compatibility
         summary = {
             "total_queries": query_analysis.get("total_queries_generated", len(semantic_queries)),
@@ -405,6 +438,7 @@ async def analyze_brand(
         # Save analysis to database
         try:
             db = get_database_session()
+            logger.info(f"Database session obtained for brand analysis save: {request.brand_name}")
             
             # Find or create brand
             brand = db.query(Brand).filter(Brand.name == request.brand_name).first()
@@ -457,6 +491,7 @@ async def analyze_brand(
                 db.add(brand)
                 db.commit()
                 db.refresh(brand)
+                logger.info(f"Created new brand: {brand.name} with ID: {brand.id}")
                 
                 # Create user-brand association if user exists
                 if current_user:
@@ -467,6 +502,9 @@ async def analyze_brand(
                     )
                     db.add(user_brand)
                     db.commit()
+                    logger.info(f"Created user-brand association for user: {current_user.id}")
+            else:
+                logger.info(f"Found existing brand: {brand.name} with ID: {brand.id}")
             
             # Create analysis record with comprehensive data for dashboard
             metrics_data = {
@@ -480,8 +518,12 @@ async def analyze_brand(
                 "success_rate": summary.get("success_rate", 0.0),
                 "query_analysis": query_analysis,
                 "performance_summary": performance_summary,
-                "competitors": analysis_result.get("competitors_overview", [])
+                "competitors": competitors_overview
             }
+            
+            # Log metrics data structure for debugging
+            logger.info(f"Saving analysis metrics with keys: {list(metrics_data.keys())}")
+            logger.info(f"Competitors data type: {type(competitors_overview)}, count: {len(competitors_overview) if isinstance(competitors_overview, list) else 'N/A'}")
             
             analysis = Analysis(
                 brand_id=brand.id,
@@ -500,6 +542,9 @@ async def analyze_brand(
             
             analysis_id = str(analysis.id)
             logger.info(f"Analysis saved to database with ID: {analysis_id}")
+            logger.info(f"Saved metrics keys: {list(analysis.metrics.keys()) if analysis.metrics else 'None'}")
+            if analysis.metrics and 'competitors' in analysis.metrics:
+                logger.info(f"Saved competitors count: {len(analysis.metrics['competitors'])}")
             
         except Exception as db_error:
             db.rollback()
@@ -520,7 +565,25 @@ async def analyze_brand(
                 "brand_name": request.brand_name,
                 "analysis_results": analysis_results,
                 "summary": summary,
-                "competitors_overview": analysis_result.get("competitors_overview", []),
+                "competitors_overview": competitors_overview,
+                "competitor_analysis": {
+                    "total_competitors": len(competitors_overview),
+                    "competitors_analyzed": len([c for c in competitors_overview if 'error' not in c]),
+                    "competitors_failed": len([c for c in competitors_overview if 'error' in c]),
+                    "competitors": competitors_overview,
+                    "comparison_metrics": {
+                        "brand_performance": {
+                            "brand_mentions": summary.get("brand_mentions", 0),
+                            "success_rate": summary.get("success_rate", 0.0),
+                            "avg_position": summary.get("avg_position", 5.0)
+                        },
+                        "competitor_average": {
+                            "avg_mentions": sum(c.get('brand_mentions', 0) for c in competitors_overview if 'error' not in c) / max(1, len([c for c in competitors_overview if 'error' not in c])),
+                            "avg_success_rate": sum(c.get('success_rate', 0) for c in competitors_overview if 'error' not in c) / max(1, len([c for c in competitors_overview if 'error' not in c])),
+                            "avg_position": sum(c.get('avg_position', 5) for c in competitors_overview if 'error' not in c) / max(1, len([c for c in competitors_overview if 'error' not in c]))
+                        }
+                    }
+                },
                 "seo_analysis": seo_analysis,
                 "query_analysis": query_analysis,
                 "optimization_metrics": optimization_metrics,

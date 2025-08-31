@@ -881,8 +881,79 @@ export default function BrandAnalysis() {
                       </div>
                     </div>
 
+                    {/* Competitor Analysis Results */}
+                    {analysisData.data?.competitor_analysis?.competitors && analysisData.data.competitor_analysis.competitors.length > 0 && (
+                      <div className="mt-6">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                          <Users className="h-5 w-5 mr-2 text-blue-600" />
+                          Competitor Analysis
+                        </h3>
+                        
+                        {/* Competitor Summary */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                          <div className="bg-blue-50 p-4 rounded-lg">
+                            <div className="text-sm text-blue-600">Competitors Analyzed</div>
+                            <div className="text-2xl font-bold text-blue-900">
+                              {analysisData.data.competitor_analysis.competitors_analyzed} / {analysisData.data.competitor_analysis.total_competitors}
+                            </div>
+                          </div>
+                          <div className="bg-green-50 p-4 rounded-lg">
+                            <div className="text-sm text-green-600">Your Success Rate</div>
+                            <div className="text-2xl font-bold text-green-900">
+                              {(analysisData.data.competitor_analysis.comparison_metrics.brand_performance.success_rate * 100).toFixed(1)}%
+                            </div>
+                          </div>
+                          <div className="bg-purple-50 p-4 rounded-lg">
+                            <div className="text-sm text-purple-600">Competitor Avg</div>
+                            <div className="text-2xl font-bold text-purple-900">
+                              {(analysisData.data.competitor_analysis.comparison_metrics.competitor_average.avg_success_rate * 100).toFixed(1)}%
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Individual Competitor Results */}
+                        <div className="space-y-4">
+                          {analysisData.data.competitor_analysis.competitors.map((competitor: any, index: number) => (
+                            <div key={index} className="border rounded-lg p-4 bg-white">
+                              <div className="flex items-center justify-between mb-3">
+                                <h4 className="font-semibold text-lg text-gray-900">{competitor.name}</h4>
+                                {competitor.error ? (
+                                  <Badge variant="destructive">Analysis Failed</Badge>
+                                ) : (
+                                  <Badge variant="outline">Analyzed</Badge>
+                                )}
+                              </div>
+                              
+                              {competitor.error ? (
+                                <p className="text-sm text-red-600">Error: {competitor.error}</p>
+                              ) : (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                  <div className="text-center">
+                                    <div className="text-2xl font-bold text-gray-900">{competitor.brand_mentions}</div>
+                                    <div className="text-xs text-gray-500">Brand Mentions</div>
+                                  </div>
+                                  <div className="text-center">
+                                    <div className="text-2xl font-bold text-gray-900">{(competitor.success_rate * 100).toFixed(1)}%</div>
+                                    <div className="text-xs text-gray-500">Success Rate</div>
+                                  </div>
+                                  <div className="text-center">
+                                    <div className="text-2xl font-bold text-gray-900">{competitor.avg_position.toFixed(1)}</div>
+                                    <div className="text-xs text-gray-500">Avg Position</div>
+                                  </div>
+                                  <div className="text-center">
+                                    <div className="text-2xl font-bold text-gray-900">{competitor.tested_queries}</div>
+                                    <div className="text-xs text-gray-500">Queries Tested</div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* SEO Analysis Results */}
-                    <Accordion type="single" collapsible>
+                    <Accordion type="single" collapsible className="mt-6">
                       <AccordionItem value="seo-analysis">
                         <AccordionTrigger>Detailed SEO Analysis</AccordionTrigger>
                         <AccordionContent>
