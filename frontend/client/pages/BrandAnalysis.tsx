@@ -35,28 +35,23 @@ import {
   Building2,
   Globe,
   FileText,
-  Upload,
-  Zap,
-  Target,
-  TrendingUp,
-  AlertCircle,
-  CheckCircle,
-  XCircle,
-  Clock,
-  BarChart3,
-  Users,
-  MessageSquare,
-  Star,
   Brain,
   Sparkles,
-  Plus,
+  BarChart3,
+  MessageSquare,
   X,
+  Plus,
   RefreshCw,
-  Download,
+  AlertCircle,
+  CheckCircle,
+  Users,
+  Target,
   Eye,
   Activity,
   Map as MapIcon,
-  CheckCircle2
+  CheckCircle2,
+  Star,
+  Lightbulb
 } from 'lucide-react';
 
 import type {
@@ -129,7 +124,6 @@ interface LocalOptimizationMetricsResponse {
   };
 }
 import { useApiController, fetchWithTimeout, TIMEOUT_DURATIONS, handleApiError } from '@/lib/api-utils';
-import { Lightbulb } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Metric card component for consistent metric display
@@ -330,12 +324,12 @@ export default function BrandAnalysis() {
       } catch (fetchError) {
         console.error('❌ fetchWithTimeout or response.text() failed:', fetchError);
         console.error('❌ Error type:', typeof fetchError);
-        console.error('❌ Error name:', fetchError?.name);
-        console.error('❌ Error message:', fetchError?.message);
-        console.error('❌ Error stack:', fetchError?.stack);
+        console.error('❌ Error name:', (fetchError as Error)?.name);
+        console.error('❌ Error message:', (fetchError as Error)?.message);
+        console.error('❌ Error stack:', (fetchError as Error)?.stack);
         
         // If it's an AbortError, it might be due to retry logic - let the retry handle it
-        if (fetchError?.name === 'AbortError') {
+        if ((fetchError as Error)?.name === 'AbortError') {
           console.log('🔄 Request was aborted, likely due to retry logic');
         }
         throw fetchError;
@@ -367,9 +361,9 @@ export default function BrandAnalysis() {
       console.error('❌ FULL ERROR DETAILS:', {
         error,
         errorType: typeof error,
-        errorName: error?.name,
-        errorMessage: error?.message,
-        errorStack: error?.stack
+        errorName: (error as Error)?.name,
+        errorMessage: (error as Error)?.message,
+        errorStack: (error as Error)?.stack
       });
       
       const errorMessage = handleApiError(error, isMountedRef);
@@ -455,14 +449,15 @@ export default function BrandAnalysis() {
         console.log('❌ Metrics API returned non-OK status:', response.status);
         const errorText = await response.text();
         console.log('❌ Metrics error response:', errorText);
+        throw new Error(`Metrics API failed with status ${response.status}`);
       }
     } catch (error) {
       console.error('❌ METRICS ERROR DETAILS:', {
         error,
         errorType: typeof error,
-        errorName: error?.name,
-        errorMessage: error?.message,
-        errorStack: error?.stack
+        errorName: (error as Error)?.name,
+        errorMessage: (error as Error)?.message,
+        errorStack: (error as Error)?.stack
       });
       
       const errorMessage = handleApiError(error, isMountedRef);
@@ -889,7 +884,7 @@ export default function BrandAnalysis() {
                     </div>
 
                     {/* Competitor Analysis Results - Simplified for new API response */}
-                    {analysisData.data?.competitors_analysis?.length > 0 ? (
+                    {analysisData.data?.competitor_analysis?.competitors?.length > 0 ? (
                       <div className="mt-6">
                         <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                           <Users className="h-5 w-5 mr-2 text-blue-600" />
@@ -901,7 +896,7 @@ export default function BrandAnalysis() {
                           <div className="bg-blue-50 p-4 rounded-lg">
                             <div className="text-sm text-blue-600">Competitors Analyzed</div>
                             <div className="text-2xl font-bold text-blue-900">
-                              {analysisData.data.competitors_analysis.length}
+                              {analysisData.data.competitor_analysis.competitors.length}
                             </div>
                           </div>
                           <div className="bg-green-50 p-4 rounded-lg">
@@ -915,14 +910,9 @@ export default function BrandAnalysis() {
                           <div className="bg-purple-50 p-4 rounded-lg">
                             <div className="text-sm text-purple-600">Competitor Avg</div>
                             <div className="text-2xl font-bold text-purple-900">
-                              {analysisData.data.competitors_analysis?.length > 0
-                                ? `${(analysisData.data.competitors_analysis
-                                    .reduce((sum: number, comp: any) => sum + (comp.overall_score || 0), 0) / 
-                                    analysisData.data.competitors_analysis.length * 100).toFixed(1)}%`
+                              {analysisData.data.competitor_analysis?.comparison_metrics?.competitor_average?.avg_success_rate 
+                                ? `${(analysisData.data.competitor_analysis.comparison_metrics.competitor_average.avg_success_rate * 100).toFixed(1)}%`
                                 : 'N/A'}
-                            </div>
-                            <div className="text-2xl font-bold text-purple-900">
-                              {(analysisData.data.competitor_analysis.comparison_metrics.competitor_average.avg_success_rate * 100).toFixed(1)}%
                             </div>
                           </div>
                         </div>
@@ -934,14 +924,64 @@ export default function BrandAnalysis() {
                               <div className="flex items-center justify-between mb-3">
                                 <h4 className="font-semibold text-lg text-gray-900">{competitor.name}</h4>
                                 {competitor.error ? (
+                                  <div className="flex items-center text-red-600">
+                                    <AlertCircle className="h-4 w-4 mr-1" />
+                                    <span className="text-sm">Analysis Error</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center text-green-600">
+                                    <CheckCircle className="h-4 w-4 mr-1" />
+                                    <span className="text-sm">Analysis Complete</span>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {competitor.error ? (
+                                <div className="text-sm text-red-600 bg-red-50 p-3 rounded">
+                                  {competitor.error}
+                                </div>
+                              ) : (
+                                <div className="space-y-3">
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="text-center">
+                                      <div className="text-2xl font-bold text-blue-600">
+                                        {competitor.overall_score ? (competitor.overall_score * 100).toFixed(1) : 'N/A'}%
+                                      </div>
+                                      <div className="text-sm text-gray-500">Overall Score</div>
+                                    </div>
+                                    <div className="text-center">
+                                      <div className="text-2xl font-bold text-green-600">
+                                        {competitor.brand_strength ? competitor.brand_strength.toFixed(1) : 'N/A'}
+                                      </div>
+                                      <div className="text-sm text-gray-500">Brand Strength</div>
+                                    </div>
+                                  </div>
+                                  
+                                  {competitor.key_insights && competitor.key_insights.length > 0 && (
+                                    <div>
+                                      <h5 className="font-medium text-gray-900 mb-2">Key Insights</h5>
+                                      <ul className="text-sm text-gray-600 space-y-1">
+                                        {competitor.key_insights.map((insight: string, insightIndex: number) => (
+                                          <li key={insightIndex} className="flex items-start">
+                                            <span className="mr-2">•</span>
+                                            <span>{insight}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-gray-500">
-                        <p>No competitor data available. Add competitors and run the analysis to see results.</p>
-                      </div>
-                    )}
-
+                      ) : (
+                        <div className="text-center py-8 text-gray-500">
+                          <Users className="mx-auto h-12 w-12 mb-4 text-gray-300" />
+                          <h3 className="text-lg font-medium text-gray-900 mb-2">No competitor analysis to show</h3>
+                          <p>Add competitors and run the analysis to see results here.</p>
+                        </div>
+                      )}
 
                     {/* SEO Analysis Results */}
                     <Accordion type="single" collapsible className="mt-6">
@@ -1315,7 +1355,7 @@ export default function BrandAnalysis() {
                             <div 
                               className="bg-blue-600 h-2.5 rounded-full" 
                               style={{ width: `${metricsData.data.metrics.embedding_relevance_score * 100}%` }}
-                            ></div>
+                            />
                           </div>
                           <p className="text-xs text-gray-500 mt-1">
                             Measures semantic relevance of content to search queries
@@ -1334,7 +1374,7 @@ export default function BrandAnalysis() {
                             <div 
                               className="bg-purple-600 h-2.5 rounded-full" 
                               style={{ width: `${metricsData.data.metrics.retrieval_confidence_score * 100}%` }}
-                            ></div>
+                            />
                           </div>
                           <p className="text-xs text-gray-500 mt-1">
                             Confidence in retrieving the most relevant content
@@ -1353,7 +1393,7 @@ export default function BrandAnalysis() {
                             <div 
                               className="bg-green-600 h-2.5 rounded-full" 
                               style={{ width: `${metricsData.data.metrics.vector_index_presence_ratio * 100}%` }}
-                            ></div>
+                            />
                           </div>
                           <p className="text-xs text-gray-500 mt-1">
                             Coverage of content in vector search index
@@ -1372,7 +1412,7 @@ export default function BrandAnalysis() {
                             <div 
                               className="bg-yellow-500 h-2.5 rounded-full" 
                               style={{ width: `${metricsData.data.metrics.attribution_rate * 100}%` }}
-                            ></div>
+                            />
                           </div>
                           <p className="text-xs text-gray-500 mt-1">
                             Rate of proper content attribution
