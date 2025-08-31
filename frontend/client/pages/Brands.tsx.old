@@ -13,6 +13,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { X } from 'lucide-react';
 import {
   Building2,
   Plus,
@@ -166,9 +168,6 @@ export default function Brands() {
     }
   };
 
-
-  };
-
   const resetForm = () => {
     setFormData({
       name: '',
@@ -201,7 +200,6 @@ export default function Brands() {
     brand.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (brand.industry?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
     (brand.categories || []).some(cat => cat.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
   );
 
   if (!hasPermission('canManageBrands')) {
@@ -431,226 +429,6 @@ export default function Brands() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-            <Building2 className="mr-3 h-8 w-8 text-blue-600" />
-            Brand Management
-          </h1>
-          <p className="text-gray-600 mt-2">
-            Manage your brands and track their analysis history
-          </p>
-        </div>
-        <div className="flex space-x-2">
-          <Button onClick={fetchBrands} variant="outline" disabled={loading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Brand
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Create New Brand</DialogTitle>
-                <DialogDescription>
-                  Add a new brand to your portfolio for analysis
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="name">Brand Name</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="Enter brand name"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="Describe your brand"
-                    rows={3}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="website">Website</Label>
-                  <Input
-                    id="website"
-                    value={formData.website}
-                    onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
-                    placeholder="https://example.com"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="industry">Industry</Label>
-                  <Input
-                    id="industry"
-                    value={formData.industry}
-                    onChange={(e) => setFormData(prev => ({ ...prev, industry: e.target.value }))}
-                    placeholder="e.g., Technology, Healthcare"
-                  />
-                </div>
-                <div>
-                  <Label>Categories</Label>
-                  <div className="flex space-x-2 mb-2">
-                    <Input
-                      value={newCategory}
-                      onChange={(e) => setNewCategory(e.target.value)}
-                      placeholder="Add category"
-                      onKeyPress={(e) => e.key === 'Enter' && addCategory()}
-                    />
-                    <Button onClick={addCategory} size="sm">
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {formData.categories.map((category, index) => (
-                      <Badge key={index} variant="secondary" className="flex items-center space-x-1">
-                        <span>{category}</span>
-                        <X 
-                          className="h-3 w-3 cursor-pointer" 
-                          onClick={() => removeCategory(index)}
-                        />
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex justify-end space-x-2">
-                  <Button variant="outline" onClick={() => { setShowCreateDialog(false); resetForm(); }}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleCreateBrand} disabled={!formData.name}>
-                    Create Brand
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
-
-      {/* Search and Filter */}
-      <div className="flex items-center space-x-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="Search brands..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      </div>
-
-      {/* Brands Grid */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(6)].map((_, i) => (
-            <Card key={i} className="animate-pulse">
-              <CardContent className="p-6">
-                <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                <div className="h-3 bg-gray-200 rounded w-full mb-4"></div>
-                <div className="flex space-x-2">
-                  <div className="h-5 bg-gray-200 rounded w-16"></div>
-                  <div className="h-5 bg-gray-200 rounded w-20"></div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : filteredBrands.length === 0 ? (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <Building2 className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No brands to show</h3>
-            <p className="text-gray-500 mb-4">
-              {searchTerm ? 'No brands match your search criteria.' : 'No brands available. Create your first brand to get started.'}
-            </p>
-            {!searchTerm && (
-              <Button onClick={() => setShowCreateDialog(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Your First Brand
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredBrands.map((brand) => (
-            <Card key={brand.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Building2 className="h-5 w-5 text-blue-600" />
-                    <CardTitle className="text-lg">{brand.name}</CardTitle>
-                  </div>
-
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {brand.description && (
-                  <p className="text-sm text-gray-600 line-clamp-2">{brand.description}</p>
-                )}
-                
-                {brand.website && (
-                  <div className="flex items-center space-x-2">
-                    <Globe className="h-4 w-4 text-gray-400" />
-                    <a 
-                      href={brand.website} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-sm text-blue-600 hover:underline"
-                    >
-                      {brand.website}
-                    </a>
-                  </div>
-                )}
-
-                {brand.industry && (
-                  <div className="flex items-center space-x-2">
-                    <Package className="h-4 w-4 text-gray-400" />
-                    <span className="text-sm text-gray-600">{brand.industry}</span>
-                  </div>
-                )}
-
-                {(brand.categories || []).length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {(brand.categories || []).slice(0, 3).map((category, index) => (
-                      <Badge key={index} variant="outline" className="text-xs">
-                        {category}
-                      </Badge>
-                    ))}
-                    {(brand.categories || []).length > 3 && (
-                      <Badge variant="outline" className="text-xs">
-                        +{brand.categories.length - 3} more
-                      </Badge>
-                    )}
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t">
-                  <div className="flex items-center space-x-1">
-                    <Calendar className="h-3 w-3" />
-                    <span>Created {new Date(brand.createdAt).toLocaleDateString()}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-
-
-
     </div>
   );
 }

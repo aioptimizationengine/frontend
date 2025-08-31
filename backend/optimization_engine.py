@@ -1995,6 +1995,12 @@ class AIOptimizationEngine:
                 'total_tests': 1,
                 'success_rate': 1.0 if mentioned else 0.0,
                 'avg_position': pos,
+                'brand_mentioned': mentioned,
+                'position': pos,
+                'optimization_suggestions': [
+                    f"Optimize content for '{q}' query",
+                    f"Improve brand visibility in {q.split()[0]} context" if mentioned else f"Add {brand_name} mentions for '{q}'"
+                ],
                 'responses': [{'platform': 'simulated', 'query': q, 'brand_mentioned': mentioned, 'position': pos}]
             })
             if mentioned:

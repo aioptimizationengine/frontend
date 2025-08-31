@@ -35,23 +35,28 @@ import {
   Building2,
   Globe,
   FileText,
-  Brain,
-  Sparkles,
-  BarChart3,
-  MessageSquare,
-  X,
-  Plus,
-  RefreshCw,
+  Upload,
+  Zap,
+  Target,
+  TrendingUp,
   AlertCircle,
   CheckCircle,
+  XCircle,
+  Clock,
+  BarChart3,
   Users,
-  Target,
+  MessageSquare,
+  Star,
+  Brain,
+  Sparkles,
+  Plus,
+  X,
+  RefreshCw,
+  Download,
   Eye,
   Activity,
   Map as MapIcon,
-  CheckCircle2,
-  Star,
-  Lightbulb
+  CheckCircle2
 } from 'lucide-react';
 
 import type {
@@ -124,7 +129,7 @@ interface LocalOptimizationMetricsResponse {
   };
 }
 import { useApiController, fetchWithTimeout, TIMEOUT_DURATIONS, handleApiError } from '@/lib/api-utils';
-import { cn } from '@/lib/utils';
+import { Lightbulb } from 'lucide-react';
 
 // Metric card component for consistent metric display
 const MetricCard = ({ title, value, description }: { title: string; value: string; description: string }) => (
@@ -324,12 +329,12 @@ export default function BrandAnalysis() {
       } catch (fetchError) {
         console.error('❌ fetchWithTimeout or response.text() failed:', fetchError);
         console.error('❌ Error type:', typeof fetchError);
-        console.error('❌ Error name:', (fetchError as Error)?.name);
-        console.error('❌ Error message:', (fetchError as Error)?.message);
-        console.error('❌ Error stack:', (fetchError as Error)?.stack);
+        console.error('❌ Error name:', fetchError?.name);
+        console.error('❌ Error message:', fetchError?.message);
+        console.error('❌ Error stack:', fetchError?.stack);
         
         // If it's an AbortError, it might be due to retry logic - let the retry handle it
-        if ((fetchError as Error)?.name === 'AbortError') {
+        if (fetchError?.name === 'AbortError') {
           console.log('🔄 Request was aborted, likely due to retry logic');
         }
         throw fetchError;
@@ -361,9 +366,9 @@ export default function BrandAnalysis() {
       console.error('❌ FULL ERROR DETAILS:', {
         error,
         errorType: typeof error,
-        errorName: (error as Error)?.name,
-        errorMessage: (error as Error)?.message,
-        errorStack: (error as Error)?.stack
+        errorName: error?.name,
+        errorMessage: error?.message,
+        errorStack: error?.stack
       });
       
       const errorMessage = handleApiError(error, isMountedRef);
@@ -449,15 +454,14 @@ export default function BrandAnalysis() {
         console.log('❌ Metrics API returned non-OK status:', response.status);
         const errorText = await response.text();
         console.log('❌ Metrics error response:', errorText);
-        throw new Error(`Metrics API failed with status ${response.status}`);
       }
     } catch (error) {
       console.error('❌ METRICS ERROR DETAILS:', {
         error,
         errorType: typeof error,
-        errorName: (error as Error)?.name,
-        errorMessage: (error as Error)?.message,
-        errorStack: (error as Error)?.stack
+        errorName: error?.name,
+        errorMessage: error?.message,
+        errorStack: error?.stack
       });
       
       const errorMessage = handleApiError(error, isMountedRef);
@@ -779,13 +783,13 @@ export default function BrandAnalysis() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {analysisForm.categories.map((category, index) => (
-                      <div key={index} className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/80">
-                        {category}
+                      <Badge key={index} variant="secondary" className="flex items-center space-x-1">
+                        <span>{category}</span>
                         <X 
-                          className="h-3 w-3 ml-1 cursor-pointer" 
+                          className="h-3 w-3 cursor-pointer" 
                           onClick={() => removeCategory(index, 'analysis')}
                         />
-                      </div>
+                      </Badge>
                     ))}
                   </div>
                 </div>
@@ -806,13 +810,13 @@ export default function BrandAnalysis() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {analysisForm.competitors.map((competitor, index) => (
-                      <div key={index} className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold border-border hover:bg-accent hover:text-accent-foreground">
-                        {competitor}
+                      <Badge key={index} variant="outline" className="flex items-center space-x-1">
+                        <span>{competitor}</span>
                         <X 
-                          className="h-3 w-3 ml-1 cursor-pointer" 
+                          className="h-3 w-3 cursor-pointer" 
                           onClick={() => removeCompetitor(index, 'analysis')}
                         />
-                      </div>
+                      </Badge>
                     ))}
                   </div>
                 </div>
@@ -852,39 +856,33 @@ export default function BrandAnalysis() {
                     {/* Summary */}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="bg-blue-50 p-3 rounded-lg">
-                        <div className="text-sm text-blue-600">AI Citation Count</div>
+                        <div className="text-sm text-blue-600">Total Queries</div>
                         <div className="text-2xl font-bold text-blue-900">
-                          {analysisData.data?.optimization_metrics?.ai_citation_count ?? 'N/A'}
+                          {analysisData.data?.summary?.total_queries || 'N/A'}
                         </div>
                       </div>
                       <div className="bg-green-50 p-3 rounded-lg">
-                        <div className="text-sm text-green-600">Attribution Rate</div>
+                        <div className="text-sm text-green-600">Brand Mentions</div>
                         <div className="text-2xl font-bold text-green-900">
-                          {analysisData.data?.optimization_metrics?.attribution_rate 
-                            ? `${(analysisData.data.optimization_metrics.attribution_rate * 100).toFixed(1)}%` 
-                            : 'N/A'}
+                          {analysisData.data.summary.brand_mentions}
                         </div>
                       </div>
                       <div className="bg-purple-50 p-3 rounded-lg">
-                        <div className="text-sm text-purple-600">LLM Answer Coverage</div>
+                        <div className="text-sm text-purple-600">Avg Position</div>
                         <div className="text-2xl font-bold text-purple-900">
-                          {analysisData.data?.optimization_metrics?.llm_answer_coverage 
-                            ? `${(analysisData.data.optimization_metrics.llm_answer_coverage * 100).toFixed(1)}%` 
-                            : 'N/A'}
+                          {analysisData.data.summary.avg_position.toFixed(1)}
                         </div>
                       </div>
                       <div className="bg-orange-50 p-3 rounded-lg">
-                        <div className="text-sm text-orange-600">Overall Score</div>
+                        <div className="text-sm text-orange-600">Visibility Score</div>
                         <div className="text-2xl font-bold text-orange-900">
-                          {analysisData.data?.optimization_metrics?.overall_score 
-                            ? `${(analysisData.data.optimization_metrics.overall_score * 100).toFixed(1)}%` 
-                            : 'N/A'}
+                          {(analysisData.data.summary.visibility_score * 100).toFixed(1)}%
                         </div>
                       </div>
                     </div>
 
-                    {/* Competitor Analysis Results - Simplified for new API response */}
-                    {analysisData.data?.competitor_analysis?.competitors?.length > 0 ? (
+                    {/* Competitor Analysis Results */}
+                    {analysisData.data?.competitor_analysis?.competitors && analysisData.data.competitor_analysis.competitors.length > 0 && (
                       <div className="mt-6">
                         <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                           <Users className="h-5 w-5 mr-2 text-blue-600" />
@@ -896,23 +894,19 @@ export default function BrandAnalysis() {
                           <div className="bg-blue-50 p-4 rounded-lg">
                             <div className="text-sm text-blue-600">Competitors Analyzed</div>
                             <div className="text-2xl font-bold text-blue-900">
-                              {analysisData.data.competitor_analysis.competitors.length}
+                              {analysisData.data.competitor_analysis.competitors_analyzed} / {analysisData.data.competitor_analysis.total_competitors}
                             </div>
                           </div>
                           <div className="bg-green-50 p-4 rounded-lg">
-                            <div className="text-sm text-green-600">Your Brand Score</div>
+                            <div className="text-sm text-green-600">Your Success Rate</div>
                             <div className="text-2xl font-bold text-green-900">
-                              {analysisData.data.optimization_metrics?.overall_score 
-                                ? `${(analysisData.data.optimization_metrics.overall_score * 100).toFixed(1)}%`
-                                : 'N/A'}
+                              {(analysisData.data.competitor_analysis.comparison_metrics.brand_performance.success_rate * 100).toFixed(1)}%
                             </div>
                           </div>
                           <div className="bg-purple-50 p-4 rounded-lg">
                             <div className="text-sm text-purple-600">Competitor Avg</div>
                             <div className="text-2xl font-bold text-purple-900">
-                              {analysisData.data.competitor_analysis?.comparison_metrics?.competitor_average?.avg_success_rate 
-                                ? `${(analysisData.data.competitor_analysis.comparison_metrics.competitor_average.avg_success_rate * 100).toFixed(1)}%`
-                                : 'N/A'}
+                              {(analysisData.data.competitor_analysis.comparison_metrics.competitor_average.avg_success_rate * 100).toFixed(1)}%
                             </div>
                           </div>
                         </div>
@@ -924,64 +918,39 @@ export default function BrandAnalysis() {
                               <div className="flex items-center justify-between mb-3">
                                 <h4 className="font-semibold text-lg text-gray-900">{competitor.name}</h4>
                                 {competitor.error ? (
-                                  <div className="flex items-center text-red-600">
-                                    <AlertCircle className="h-4 w-4 mr-1" />
-                                    <span className="text-sm">Analysis Error</span>
-                                  </div>
+                                  <Badge variant="destructive">Analysis Failed</Badge>
                                 ) : (
-                                  <div className="flex items-center text-green-600">
-                                    <CheckCircle className="h-4 w-4 mr-1" />
-                                    <span className="text-sm">Analysis Complete</span>
-                                  </div>
+                                  <Badge variant="outline">Analyzed</Badge>
                                 )}
                               </div>
                               
                               {competitor.error ? (
-                                <div className="text-sm text-red-600 bg-red-50 p-3 rounded">
-                                  {competitor.error}
-                                </div>
+                                <p className="text-sm text-red-600">Error: {competitor.error}</p>
                               ) : (
-                                <div className="space-y-3">
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div className="text-center">
-                                      <div className="text-2xl font-bold text-blue-600">
-                                        {competitor.overall_score ? (competitor.overall_score * 100).toFixed(1) : 'N/A'}%
-                                      </div>
-                                      <div className="text-sm text-gray-500">Overall Score</div>
-                                    </div>
-                                    <div className="text-center">
-                                      <div className="text-2xl font-bold text-green-600">
-                                        {competitor.brand_strength ? competitor.brand_strength.toFixed(1) : 'N/A'}
-                                      </div>
-                                      <div className="text-sm text-gray-500">Brand Strength</div>
-                                    </div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                  <div className="text-center">
+                                    <div className="text-2xl font-bold text-gray-900">{competitor.brand_mentions}</div>
+                                    <div className="text-xs text-gray-500">Brand Mentions</div>
                                   </div>
-                                  
-                                  {competitor.key_insights && competitor.key_insights.length > 0 && (
-                                    <div>
-                                      <h5 className="font-medium text-gray-900 mb-2">Key Insights</h5>
-                                      <ul className="text-sm text-gray-600 space-y-1">
-                                        {competitor.key_insights.map((insight: string, insightIndex: number) => (
-                                          <li key={insightIndex} className="flex items-start">
-                                            <span className="mr-2">•</span>
-                                            <span>{insight}</span>
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  )}
+                                  <div className="text-center">
+                                    <div className="text-2xl font-bold text-gray-900">{(competitor.success_rate * 100).toFixed(1)}%</div>
+                                    <div className="text-xs text-gray-500">Success Rate</div>
+                                  </div>
+                                  <div className="text-center">
+                                    <div className="text-2xl font-bold text-gray-900">{competitor.avg_position.toFixed(1)}</div>
+                                    <div className="text-xs text-gray-500">Avg Position</div>
+                                  </div>
+                                  <div className="text-center">
+                                    <div className="text-2xl font-bold text-gray-900">{competitor.tested_queries}</div>
+                                    <div className="text-xs text-gray-500">Queries Tested</div>
+                                  </div>
                                 </div>
                               )}
                             </div>
                           ))}
                         </div>
-                      ) : (
-                        <div className="text-center py-8 text-gray-500">
-                          <Users className="mx-auto h-12 w-12 mb-4 text-gray-300" />
-                          <h3 className="text-lg font-medium text-gray-900 mb-2">No competitor analysis to show</h3>
-                          <p>Add competitors and run the analysis to see results here.</p>
-                        </div>
-                      )}
+                      </div>
+                    )}
 
                     {/* SEO Analysis Results */}
                     <Accordion type="single" collapsible className="mt-6">
@@ -1071,8 +1040,7 @@ export default function BrandAnalysis() {
                                 Priority Recommendations
                               </h3>
                               <div className="space-y-4">
-                                {analysisData.data.seo_analysis?.priority_recommendations && analysisData.data.seo_analysis.priority_recommendations.length > 0 ? (
-                                  analysisData.data.seo_analysis.priority_recommendations.map((rec: any, index: number) => (
+                                {analysisData.data.seo_analysis?.priority_recommendations?.map((rec: any, index: number) => (
                                   <div key={index} className={`p-4 rounded-lg border-l-4 ${
                                     rec.priority === 'high' ? 'border-red-500 bg-red-50' :
                                     rec.priority === 'medium' ? 'border-yellow-500 bg-yellow-50' :
@@ -1083,13 +1051,15 @@ export default function BrandAnalysis() {
                                         <h4 className="font-semibold text-gray-900">{rec.title}</h4>
                                         <p className="text-sm text-gray-600 mt-1">{rec.description}</p>
                                       </div>
-                                      <div className={cn(
-                                        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ml-2",
-                                        rec.priority === 'high' ? 'bg-destructive text-destructive-foreground' :
-                                        rec.priority === 'medium' ? 'border-border' : 'bg-primary text-primary-foreground'
-                                      )}>
+                                      <Badge 
+                                        variant={
+                                          rec.priority === 'high' ? 'destructive' : 
+                                          rec.priority === 'medium' ? 'outline' : 'default'
+                                        }
+                                        className="ml-2"
+                                      >
                                         {rec.priority.charAt(0).toUpperCase() + rec.priority.slice(1)}
-                                      </div>
+                                      </Badge>
                                     </div>
                                     <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
                                       <div>
@@ -1119,8 +1089,7 @@ export default function BrandAnalysis() {
                                       </div>
                                     )}
                                   </div>
-                                ))
-                                ) : (
+                                )) || (
                                   <div className="text-sm text-gray-500 italic">
                                     No priority recommendations available
                                   </div>
@@ -1270,13 +1239,13 @@ export default function BrandAnalysis() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {metricsForm.categories.map((category, index) => (
-                      <div key={index} className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/80">
-                        {category}
+                      <Badge key={index} variant="secondary" className="flex items-center space-x-1">
+                        <span>{category}</span>
                         <X 
-                          className="h-3 w-3 ml-1 cursor-pointer" 
+                          className="h-3 w-3 cursor-pointer" 
                           onClick={() => removeCategory(index, 'metrics')}
                         />
-                      </div>
+                      </Badge>
                     ))}
                   </div>
                 </div>
@@ -1297,13 +1266,13 @@ export default function BrandAnalysis() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {metricsForm.competitors.map((competitor, index) => (
-                      <div key={index} className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold border-border hover:bg-accent hover:text-accent-foreground">
-                        {competitor}
+                      <Badge key={index} variant="outline" className="flex items-center space-x-1">
+                        <span>{competitor}</span>
                         <X 
-                          className="h-3 w-3 ml-1 cursor-pointer" 
+                          className="h-3 w-3 cursor-pointer" 
                           onClick={() => removeCompetitor(index, 'metrics')}
                         />
-                      </div>
+                      </Badge>
                     ))}
                   </div>
                 </div>
@@ -1355,7 +1324,7 @@ export default function BrandAnalysis() {
                             <div 
                               className="bg-blue-600 h-2.5 rounded-full" 
                               style={{ width: `${metricsData.data.metrics.embedding_relevance_score * 100}%` }}
-                            />
+                            ></div>
                           </div>
                           <p className="text-xs text-gray-500 mt-1">
                             Measures semantic relevance of content to search queries
@@ -1374,7 +1343,7 @@ export default function BrandAnalysis() {
                             <div 
                               className="bg-purple-600 h-2.5 rounded-full" 
                               style={{ width: `${metricsData.data.metrics.retrieval_confidence_score * 100}%` }}
-                            />
+                            ></div>
                           </div>
                           <p className="text-xs text-gray-500 mt-1">
                             Confidence in retrieving the most relevant content
@@ -1393,7 +1362,7 @@ export default function BrandAnalysis() {
                             <div 
                               className="bg-green-600 h-2.5 rounded-full" 
                               style={{ width: `${metricsData.data.metrics.vector_index_presence_ratio * 100}%` }}
-                            />
+                            ></div>
                           </div>
                           <p className="text-xs text-gray-500 mt-1">
                             Coverage of content in vector search index
@@ -1412,7 +1381,7 @@ export default function BrandAnalysis() {
                             <div 
                               className="bg-yellow-500 h-2.5 rounded-full" 
                               style={{ width: `${metricsData.data.metrics.attribution_rate * 100}%` }}
-                            />
+                            ></div>
                           </div>
                           <p className="text-xs text-gray-500 mt-1">
                             Rate of proper content attribution
@@ -1502,7 +1471,7 @@ export default function BrandAnalysis() {
                           description="Algorithmically determined authority score"
                         />
 
-                        {/* Overall Score */}
+{/* Overall Score */}
                         <MetricCard 
                           title="Overall Score"
                           value={`${((metricsData.data.metrics.overall_score ?? 0) * 100).toFixed(1)}%`}
@@ -1596,13 +1565,13 @@ export default function BrandAnalysis() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {queryForm.categories.map((category, index) => (
-                      <div key={index} className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/80">
-                        {category}
+                      <Badge key={index} variant="secondary" className="flex items-center space-x-1">
+                        <span>{category}</span>
                         <X 
-                          className="h-3 w-3 ml-1 cursor-pointer" 
+                          className="h-3 w-3 cursor-pointer" 
                           onClick={() => removeCategory(index, 'query')}
                         />
-                      </div>
+                      </Badge>
                     ))}
                   </div>
                 </div>
@@ -1779,7 +1748,7 @@ export default function BrandAnalysis() {
                                 </Badge>
                               )}
                             </div>
-                          {result.optimization_suggestions.length > 0 && (
+                          {result.optimization_suggestions && result.optimization_suggestions.length > 0 && (
                             <div className="text-sm text-gray-600">
                               <div className="font-medium mb-1">Suggestions:</div>
                               <ul className="list-disc list-inside">
