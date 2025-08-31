@@ -1827,7 +1827,6 @@ class AIOptimizationEngine:
         return insights[:4]
 
     def _analyze_comparison_factors(self, brand_name: str, comparison_queries: List[str]) -> List[str]:
-{{ ... }}
         """Analyze how customers compare the brand against alternatives using competitive intelligence"""
         industry_context = self._determine_industry_context(brand_name, [])
         
