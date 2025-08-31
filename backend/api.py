@@ -7,6 +7,7 @@ INCLUDES: All route modules for complete functionality
 import os
 import time
 import json
+import logging
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 import asyncio
@@ -19,6 +20,14 @@ from pydantic import BaseModel, Field, validator
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 import uvicorn
+
+# Configure logging first to ensure all log messages are captured
+from logging_config import setup_logging
+setup_logging()
+
+# Get logger after configuration
+logger = logging.getLogger(__name__)
+logger.info("API service starting with configured logging")
 
 # Essential imports - must work for API to function
 from database import get_db, check_database_health

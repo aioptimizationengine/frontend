@@ -1040,7 +1040,8 @@ export default function BrandAnalysis() {
                                 Priority Recommendations
                               </h3>
                               <div className="space-y-4">
-                                {analysisData.data.seo_analysis?.priority_recommendations?.map((rec: any, index: number) => (
+                                {analysisData.data.seo_analysis?.priority_recommendations && analysisData.data.seo_analysis.priority_recommendations.length > 0 ? (
+                                  analysisData.data.seo_analysis.priority_recommendations.map((rec: any, index: number) => (
                                   <div key={index} className={`p-4 rounded-lg border-l-4 ${
                                     rec.priority === 'high' ? 'border-red-500 bg-red-50' :
                                     rec.priority === 'medium' ? 'border-yellow-500 bg-yellow-50' :
@@ -1089,7 +1090,8 @@ export default function BrandAnalysis() {
                                       </div>
                                     )}
                                   </div>
-                                )) || (
+                                ))
+                                ) : (
                                   <div className="text-sm text-gray-500 italic">
                                     No priority recommendations available
                                   </div>
