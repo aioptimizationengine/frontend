@@ -55,7 +55,7 @@ def sanitize_for_json(obj: Any) -> Any:
             return None
 
 # Essential imports - must work for API to function
-from database import get_db, check_database_health, get_database_session
+from database import get_db, check_database_health, SessionLocal
 from db_models import Brand, User, Analysis, UserRole, UserBrand
 from models import StandardResponse, ErrorResponse, User, Brand, Analysis, UserBrand
 from auth_utils import get_current_user_optional
@@ -242,14 +242,11 @@ async def check_rate_limit() -> bool:
 def get_database_session():
     """Get database session"""
     try:
-        db = next(get_db())
+        db = SessionLocal()
         return db
     except Exception as e:
-        logger.error(f"Database connection failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database connection failed"
-        )
+        logger.error(f"Failed to get database session: {e}")
+        raise HTTPException(status_code=500, detail="Database connection failed")
 
 # ==================== FASTAPI APP SETUP ====================
 
@@ -506,9 +503,10 @@ async def analyze_brand(
             db = get_database_session()
             logger.info(f"Database session obtained for brand analysis save: {request.brand_name}")
             
-            # Find or create brand
-            brand = db.query(Brand).filter(Brand.name == request.brand_name).first()
-            if not brand:
+            try:
+                # Find or create brand
+                brand = db.query(Brand).filter(Brand.name == request.brand_name).first()
+                if not brand:
                 # Infer industry from product categories if available
                 inferred_industry = ""
                 if request.product_categories:
@@ -612,9 +610,14 @@ async def analyze_brand(
             if analysis.metrics and 'competitors' in analysis.metrics:
                 logger.info(f"Saved competitors count: {len(analysis.metrics['competitors'])}")
             
-        except Exception as db_error:
-            db.rollback()
-            logger.error(f"Failed to save analysis to database: {db_error}")
+            except Exception as db_error:
+                db.rollback()
+                logger.error(f"Failed to save analysis to database: {db_error}")
+                analysis_id = f"analysis_{int(time.time())}"  # Fallback ID
+            finally:
+                db.close()
+        except Exception as session_error:
+            logger.error(f"Failed to create database session: {session_error}")
             analysis_id = f"analysis_{int(time.time())}"  # Fallback ID
         
         logger.info(
@@ -1114,28 +1117,31 @@ async def list_brands(
     try:
         db = get_database_session()
         
-        # Get brands associated with user
-        brands = db.query(Brand).all()
-        
-        brand_list = []
-        for brand in brands:
-            brand_list.append({
-                "id": str(brand.id),
-                "name": brand.name,
-                "website_url": brand.website_url,
-                "industry": brand.industry,
-                "tracking_enabled": brand.tracking_enabled,
-                "created_at": brand.created_at.isoformat() if brand.created_at else None
-            })
-        
-        return StandardResponse(
-            success=True,
-            data={
-                "brands": brand_list,
-                "total_count": len(brand_list),
-                "timestamp": datetime.now().isoformat()
-            }
-        )
+        try:
+            # Get brands associated with user
+            brands = db.query(Brand).all()
+            
+            brand_list = []
+            for brand in brands:
+                brand_list.append({
+                    "id": str(brand.id),
+                    "name": brand.name,
+                    "website_url": brand.website_url,
+                    "industry": brand.industry,
+                    "tracking_enabled": brand.tracking_enabled,
+                    "created_at": brand.created_at.isoformat() if brand.created_at else None
+                })
+            
+            return StandardResponse(
+                success=True,
+                data={
+                    "brands": brand_list,
+                    "total_count": len(brand_list),
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
+        finally:
+            db.close()
         
     except Exception as e:
         logger.error(f"Failed to list brands: {e}", exc_info=True)
@@ -1340,16 +1346,17 @@ async def get_brand_history(
     try:
         db = get_database_session()
         
-        # Get brand
-        brand = db.query(Brand).filter(Brand.name == brand_name).first()
-        if not brand:
-            return StandardResponse(
-                success=False,
-                error="Brand not found"
-            )
-        
-        # Get analysis history
-        analyses = db.query(Analysis).filter(Analysis.brand_id == brand.id).order_by(Analysis.created_at.desc()).all()
+        try:
+            # Get brand
+            brand = db.query(Brand).filter(Brand.name == brand_name).first()
+            if not brand:
+                return StandardResponse(
+                    success=False,
+                    error="Brand not found"
+                )
+            
+            # Get analysis history
+            analyses = db.query(Analysis).filter(Analysis.brand_id == brand.id).order_by(Analysis.created_at.desc()).all()
         
         analysis_history = []
         for analysis in analyses:
@@ -1364,15 +1371,17 @@ async def get_brand_history(
                 "citation_frequency": analysis.citation_frequency
             })
         
-        return StandardResponse(
-            success=True,
-            data={
-                "brand_name": brand_name,
-                "analysis_history": analysis_history,
-                "total_analyses": len(analysis_history),
-                "timestamp": datetime.now().isoformat()
-            }
-        )
+            return StandardResponse(
+                success=True,
+                data={
+                    "brand_name": brand_name,
+                    "analysis_history": analysis_history,
+                    "total_analyses": len(analysis_history),
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
+        finally:
+            db.close()
         
     except Exception as e:
         logger.error(f"Failed to get brand history: {e}", exc_info=True)
