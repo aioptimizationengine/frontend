@@ -45,6 +45,24 @@ init_db_schema() {
   fi
 }
 
+run_verification_test() {
+  if [ -f "/app/verify_fixes.py" ]; then
+    echo "🔍 Running backend analysis engine verification test..."
+    echo "=================================================="
+    if python /app/verify_fixes.py; then
+      echo "=================================================="
+      echo "✅ Verification test completed successfully!"
+    else
+      echo "=================================================="
+      echo "⚠️  Verification test completed with warnings (non-fatal)."
+    fi
+    echo ""
+  else
+    echo "Skipping verification test (verify_fixes.py not found)."
+  fi
+}
+
 install_dev_deps_bg
 init_db_schema
+run_verification_test
 start_app

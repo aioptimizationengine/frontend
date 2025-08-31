@@ -22,6 +22,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend source code
 COPY backend/ ./
 
+# Copy verification script for testing fixes
+COPY verify_fixes.py /app/verify_fixes.py
+
 # Include database init SQL and setup script
 COPY backend/setup_db.py /app/setup_db.py
 COPY database_setup.sql /app/backend/database_setup.sql
