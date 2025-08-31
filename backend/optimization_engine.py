@@ -1338,72 +1338,34 @@ class AIOptimizationEngine:
         return contexts.get(industry, 'competitive market environment')
 
     async def _generate_semantic_queries(self, brand_name: str, product_categories: List[str]) -> List[str]:
-        """Generate intelligent semantic queries based on brand research and context, with optional LLM assistance."""
+        """Generate semantic queries using LLMs only (no heuristic fallback)."""
         try:
-            # Step 1: Research brand context first
+            # Research brand context to enrich the LLM prompt
             brand_context = await self._research_brand_context(brand_name, product_categories)
+            logger.info(
+                f"Generating LLM-only queries for {brand_name} (industry={brand_context.get('industry')}, type={brand_context.get('brand_type')})"
+            )
 
-            queries: List[str] = []
-            industry = brand_context['industry']
-            brand_type = brand_context['brand_type']
-            insights = brand_context['insights']
+            # Require an LLM client
+            if not (self.anthropic_client or self.openai_client):
+                raise RuntimeError("LLM query generation requires configured Anthropic or OpenAI client")
 
-            logger.info(f"Generating queries for {brand_name} ({industry} industry, {brand_type} type)")
+            # Generate via LLM only
+            llm_queries = await self._llm_generate_queries(brand_name, product_categories, brand_context)
+            if not llm_queries:
+                raise RuntimeError("LLM query generation returned no queries")
 
-            # Step 2: If LLM clients are available, attempt LLM-backed query generation (merge + dedupe)
-            llm_queries: List[str] = []
-            try:
-                if self.anthropic_client or self.openai_client:
-                    llm_queries = await self._llm_generate_queries(brand_name, product_categories, brand_context)
-            except Exception as e:
-                logger.warning(f"LLM-backed query generation failed, will use heuristic only: {e}")
-
-            # Industry-specific base queries
-            base_industry_queries = self._generate_industry_specific_queries(brand_name, industry, brand_type)
-            queries.extend(base_industry_queries)
-
-            # Use cases and differentiators to expand queries
-            for audience in insights.get('target_audience', []):
-                queries.extend([
-                    f"Is {brand_name} good for {audience}?",
-                    f"{brand_name} benefits for {audience}",
-                    f"How {audience} use {brand_name}",
-                ])
-
-            for diff in insights.get('key_differentiators', []):
-                queries.extend([
-                    f"{brand_name} {diff}",
-                    f"How {brand_name} handles {diff}",
-                    f"{brand_name} {diff} comparison",
-                ])
-
-            # Add product category specific queries
-            for category in product_categories or []:
-                queries.extend([
-                    f"{brand_name} {category} pricing",
-                    f"{brand_name} {category} vs alternatives",
-                    f"{brand_name} {category} integration",
-                    f"{brand_name} {category} review",
-                    f"{brand_name} {category} features",
-                ])
-
-            # Merge LLM queries (if any), then dedupe and cap
-            all_queries: List[str] = []
-            if llm_queries:
-                cleaned = [q.strip() for q in llm_queries if isinstance(q, str) and q.strip()]
-                all_queries.extend(cleaned)
-            all_queries.extend(queries)
-
-            # Remove duplicates and cap at 60
-            unique_queries = list(dict.fromkeys(all_queries))[:60]
-
-            logger.info(f"Generated {len(unique_queries)} intelligent queries for {brand_name} based on {industry} industry research")
+            # Deduplicate and cap at 60
+            unique_queries = list(
+                dict.fromkeys([q.strip() for q in llm_queries if isinstance(q, str) and q.strip()])
+            )[:60]
+            logger.info(f"Generated {len(unique_queries)} LLM queries for {brand_name}")
             return unique_queries
 
         except Exception as e:
-            logger.error(f"Intelligent query generation failed: {e}")
-            # Fallback to basic queries
-            return self._generate_fallback_queries(brand_name)
+            logger.error(f"LLM-only query generation failed: {e}")
+            # No fallback; surface error to caller
+            raise
 
     async def _llm_generate_queries(self, brand_name: str, product_categories: List[str], brand_context: Dict[str, Any]) -> List[str]:
         """Use Anthropic/OpenAI to propose semantic queries for the brand. Returns a list, falls back to []."""
