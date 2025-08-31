@@ -1368,56 +1368,140 @@ class AIOptimizationEngine:
             raise
 
     async def _llm_generate_queries(self, brand_name: str, product_categories: List[str], brand_context: Dict[str, Any]) -> List[str]:
-        """Use Anthropic/OpenAI to propose semantic queries for the brand. Returns a list, falls back to []."""
+        """Use Anthropic/OpenAI to propose semantic queries for the brand. LLM-only; no heuristic fallback."""
+        use_cases = self._identify_use_cases(brand_name, brand_context.get('industry', 'general business'))
         prompt = (
-            "You are helping generate search-style queries to evaluate a brand's presence in AI answers. "
-            "Return 20-40 short, diverse queries (no numbering, one per line) suited to testing whether the brand is mentioned.\n"
+            "You generate search-style queries to evaluate a brand's presence in AI answers.\n"
+            "Output rules:\n"
+            "- Return 25-40 queries.\n"
+            "- One query per line.\n"
+            "- No numbering or bullets.\n"
+            "- Keep queries short and realistic.\n"
+            "- Prefer queries that explicitly include the brand name.\n"
+            "Context:\n"
             f"Brand: {brand_name}\n"
-            f"Industry: {brand_context.get('industry','unknown')}\n"
-            f"Brand type: {brand_context.get('brand_type','general')}\n"
-            f"Use cases: {', '.join(self._identify_use_cases(brand_name, brand_context.get('industry','general business')))}\n"
+            f"Industry: {brand_context.get('industry', 'unknown')}\n"
+            f"Brand type: {brand_context.get('brand_type', 'general')}\n"
+            f"Use cases: {', '.join(use_cases)}\n"
             f"Product categories: {', '.join(product_categories or [])}\n"
-            "Focus on realistic user intents (what, how, pricing, comparison, integration, benefits, reviews, alternatives)."
+            "Cover intents like: what, how, pricing, comparison, integration, benefits, reviews, alternatives.\n"
+            "Example format (do not prefix numbers):\n"
+            f"{brand_name} pricing\n{brand_name} vs competitors\nIs {brand_name} good for businesses?\n{brand_name} integration with Shopify\n"
         )
+
         results: List[str] = []
-        # Try Anthropic first
+
+        # Try Anthropic first with robust parsing
         try:
             if self.anthropic_client:
                 msg = await self.anthropic_client.messages.create(
                     model="claude-3-haiku-20240307",
-                    max_tokens=400,
-                    temperature=0.5,
+                    max_tokens=600,
+                    temperature=0.4,
                     messages=[{"role": "user", "content": prompt}],
                 )
-                text = "".join(block.get("text", "") for block in (getattr(msg, 'content', None) or []) if isinstance(block, dict))
+                text = ""
+                content = getattr(msg, 'content', None)
+                if content:
+                    try:
+                        # content can be list of blocks; each block may be an object with .text or a dict
+                        parts = []
+                        for block in content:
+                            if isinstance(block, dict):
+                                parts.append(block.get('text', '') or '')
+                            else:
+                                blk_text = getattr(block, 'text', '')
+                                parts.append(blk_text or '')
+                        text = "".join(parts)
+                    except Exception:
+                        pass
                 if not text:
                     text = getattr(msg, 'text', '') or ''
-                lines = [l.strip("- •\t ") for l in text.splitlines()]
+                lines = [l.strip().lstrip("-•\t ") for l in (text or '').splitlines()]
                 results = [l for l in lines if l]
         except Exception as e:
             logger.info(f"Anthropic query gen failed: {e}")
 
-        # If none, try OpenAI
+        # If none, try OpenAI with robust parsing
         if not results:
             try:
                 if self.openai_client:
                     completion = await self.openai_client.chat.completions.create(
                         model="gpt-4o-mini",
-                        temperature=0.5,
+                        temperature=0.4,
                         messages=[
-                            {"role": "system", "content": "You return only queries, one per line, no numbering."},
+                            {"role": "system", "content": "Return only queries, one per line, no numbering or bullets."},
                             {"role": "user", "content": prompt},
                         ],
                     )
-                    text = completion.choices[0].message.content if completion and completion.choices else ""
-                    lines = [l.strip("- •\t ") for l in (text or '').splitlines()]
+                    text = ""
+                    if completion and getattr(completion, 'choices', None):
+                        try:
+                            text = completion.choices[0].message.content or ""
+                        except Exception:
+                            text = ""
+                    lines = [l.strip().lstrip("-•\t ") for l in (text or '').splitlines()]
                     results = [l for l in lines if l]
             except Exception as e:
                 logger.info(f"OpenAI query gen failed: {e}")
 
-        # Light filtering and bounds for LLM-generated queries
-        results = [q for q in results if brand_name.lower() in q.lower() or len(q.split()) >= 2]
-        return results[:40]
+        # Retry once with a stricter instruction if empty, still LLM-only
+        if not results:
+            retry_prompt = prompt + "\nImportant: Ensure each query explicitly contains the brand name."
+            try:
+                if self.anthropic_client:
+                    msg = await self.anthropic_client.messages.create(
+                        model="claude-3-haiku-20240307",
+                        max_tokens=600,
+                        temperature=0.2,
+                        messages=[{"role": "user", "content": retry_prompt}],
+                    )
+                    text = ""
+                    content = getattr(msg, 'content', None)
+                    if content:
+                        parts = []
+                        for block in content:
+                            if isinstance(block, dict):
+                                parts.append(block.get('text', '') or '')
+                            else:
+                                parts.append(getattr(block, 'text', '') or '')
+                        text = "".join(parts)
+                    if not text:
+                        text = getattr(msg, 'text', '') or ''
+                    lines = [l.strip().lstrip("-•\t ") for l in (text or '').splitlines()]
+                    results = [l for l in lines if l]
+            except Exception:
+                pass
+        if not results and self.openai_client:
+            try:
+                completion = await self.openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    temperature=0.2,
+                    messages=[
+                        {"role": "system", "content": "Return only queries, one per line, no numbering or bullets."},
+                        {"role": "user", "content": retry_prompt},
+                    ],
+                )
+                text = ""
+                if completion and getattr(completion, 'choices', None):
+                    try:
+                        text = completion.choices[0].message.content or ""
+                    except Exception:
+                        text = ""
+                lines = [l.strip().lstrip("-•\t ") for l in (text or '').splitlines()]
+                results = [l for l in lines if l]
+            except Exception:
+                pass
+
+        # Basic cleanup and bounds (LLM-only)
+        cleaned = []
+        for q in results:
+            # Remove any leading numbering like "1. ", "- ", etc.
+            q = q.strip()
+            q = q.lstrip("-•*\t ")
+            if q and q not in cleaned:
+                cleaned.append(q)
+        return cleaned[:40]
 
     def _generate_industry_specific_queries(self, brand_name: str, industry: str, brand_type: str) -> List[str]:
         """Generate industry-specific base queries (helper for context/insights)."""
