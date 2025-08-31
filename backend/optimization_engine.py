@@ -1391,6 +1391,32 @@ class AIOptimizationEngine:
 
         results: List[str] = []
 
+        # Helper: parse text into list of queries
+        def _parse_queries_text(text: str) -> List[str]:
+            if not text:
+                return []
+            # Try JSON array first
+            try:
+                import json
+                data = json.loads(text)
+                if isinstance(data, list):
+                    return [str(x).strip() for x in data if str(x).strip()]
+            except Exception:
+                pass
+            # If inside code fences, extract inner
+            try:
+                import re
+                m = re.search(r"```(?:json|txt|text)?\n([\s\S]*?)```", text)
+                if m:
+                    inner = m.group(1)
+                    lines = [l.strip().lstrip("-•*\t ") for l in inner.splitlines()]
+                    return [l for l in lines if l]
+            except Exception:
+                pass
+            # Fallback to splitting lines
+            lines = [l.strip().lstrip("-•*\t ") for l in text.splitlines()]
+            return [l for l in lines if l]
+
         # Try Anthropic first with robust parsing
         try:
             if self.anthropic_client:
@@ -1417,8 +1443,7 @@ class AIOptimizationEngine:
                         pass
                 if not text:
                     text = getattr(msg, 'text', '') or ''
-                lines = [l.strip().lstrip("-•\t ") for l in (text or '').splitlines()]
-                results = [l for l in lines if l]
+                results = _parse_queries_text(text)
         except Exception as e:
             logger.info(f"Anthropic query gen failed: {e}")
 
@@ -1440,8 +1465,7 @@ class AIOptimizationEngine:
                             text = completion.choices[0].message.content or ""
                         except Exception:
                             text = ""
-                    lines = [l.strip().lstrip("-•\t ") for l in (text or '').splitlines()]
-                    results = [l for l in lines if l]
+                    results = _parse_queries_text(text)
             except Exception as e:
                 logger.info(f"OpenAI query gen failed: {e}")
 
@@ -1459,17 +1483,19 @@ class AIOptimizationEngine:
                     text = ""
                     content = getattr(msg, 'content', None)
                     if content:
-                        parts = []
-                        for block in content:
-                            if isinstance(block, dict):
-                                parts.append(block.get('text', '') or '')
-                            else:
-                                parts.append(getattr(block, 'text', '') or '')
-                        text = "".join(parts)
+                        try:
+                            parts = []
+                            for block in content:
+                                if isinstance(block, dict):
+                                    parts.append(block.get('text', '') or '')
+                                else:
+                                    parts.append(getattr(block, 'text', '') or '')
+                            text = "".join(parts)
+                        except Exception:
+                            pass
                     if not text:
                         text = getattr(msg, 'text', '') or ''
-                    lines = [l.strip().lstrip("-•\t ") for l in (text or '').splitlines()]
-                    results = [l for l in lines if l]
+                    results = _parse_queries_text(text)
             except Exception:
                 pass
         if not results and self.openai_client:
@@ -1488,8 +1514,56 @@ class AIOptimizationEngine:
                         text = completion.choices[0].message.content or ""
                     except Exception:
                         text = ""
-                lines = [l.strip().lstrip("-•\t ") for l in (text or '').splitlines()]
-                results = [l for l in lines if l]
+                results = _parse_queries_text(text)
+            except Exception:
+                pass
+
+        # Last-chance retry: change model/format and force JSON array
+        if not results:
+            try:
+                if self.anthropic_client:
+                    json_prompt = prompt + "\nReturn ONLY a JSON array of strings, no prose."
+                    msg = await self.anthropic_client.messages.create(
+                        model="claude-3-haiku-20240307",
+                        max_tokens=700,
+                        temperature=0.3,
+                        messages=[{"role": "user", "content": json_prompt}],
+                    )
+                    text = getattr(msg, 'text', '') or ''
+                    if not text:
+                        content = getattr(msg, 'content', None)
+                        if content:
+                            try:
+                                parts = []
+                                for block in content:
+                                    if isinstance(block, dict):
+                                        parts.append(block.get('text', '') or '')
+                                    else:
+                                        parts.append(getattr(block, 'text', '') or '')
+                                text = "".join(parts)
+                            except Exception:
+                                pass
+                    results = _parse_queries_text(text)
+            except Exception:
+                pass
+        if not results and self.openai_client:
+            try:
+                json_prompt = prompt + "\nReturn ONLY a JSON array of strings, no prose."
+                completion = await self.openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    temperature=0.3,
+                    messages=[
+                        {"role": "system", "content": "Return only a JSON array of strings."},
+                        {"role": "user", "content": json_prompt},
+                    ],
+                )
+                text = ""
+                if completion and getattr(completion, 'choices', None):
+                    try:
+                        text = completion.choices[0].message.content or ""
+                    except Exception:
+                        text = ""
+                results = _parse_queries_text(text)
             except Exception:
                 pass
 
