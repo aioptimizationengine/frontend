@@ -414,11 +414,28 @@ async def analyze_brand(
             # keep original competitors_overview as-is
         
         # Create summary for dashboard compatibility
+        # Fix visibility score calculation - overall_score is already a percentage (0-1), convert properly
+        visibility_score = performance_summary.get('overall_score', 0)
+        if visibility_score > 1:  # If it's already a percentage > 100, normalize it
+            visibility_score = visibility_score / 100
+        
+        # Get brand mentions from query analysis first, fallback to optimization metrics
+        brand_mentions = query_analysis.get("brand_mentions", 0)
+        if brand_mentions == 0:
+            brand_mentions = optimization_metrics.get('ai_citation_count', 0)
+        
+        # Get average position from query analysis summary metrics
+        avg_position = 5.0  # Default fallback
+        if query_analysis.get("summary_metrics", {}).get("avg_position"):
+            avg_position = query_analysis["summary_metrics"]["avg_position"]
+        elif query_analysis.get("summary", {}).get("avg_position"):
+            avg_position = query_analysis["summary"]["avg_position"]
+        
         summary = {
             "total_queries": query_analysis.get("total_queries_generated", len(semantic_queries)),
-            "brand_mentions": query_analysis.get("brand_mentions", optimization_metrics.get('ai_citation_count', 0)),
-            "avg_position": query_analysis.get("summary", {}).get("avg_position", 3.2),
-            "visibility_score": performance_summary.get('overall_score', 0) * 100,
+            "brand_mentions": brand_mentions,
+            "avg_position": avg_position,
+            "visibility_score": visibility_score * 100,  # Convert 0-1 to 0-100%
             "tested_queries": query_analysis.get("tested_queries", 0),
             "success_rate": query_analysis.get("success_rate", 0.0)
         }

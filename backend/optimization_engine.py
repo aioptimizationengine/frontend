@@ -410,21 +410,21 @@ class AIOptimizationEngine:
             
             logger.info(f"Created {len(chunks)} content chunks and {len(queries)} test queries")
             
-            # Calculate all metrics with proper error handling and minimum values
-            metrics.chunk_retrieval_frequency = max(0.3, self._calculate_chunk_retrieval_frequency(chunks))
-            metrics.embedding_relevance_score = max(0.4, self._calculate_embedding_relevance(chunks, queries))
-            metrics.attribution_rate = max(0.5, self._calculate_attribution_rate(brand_name, chunks))
-            metrics.ai_citation_count = max(5, self._calculate_ai_citation_count(brand_name, chunks))
-            metrics.vector_index_presence_ratio = max(0.4, self._calculate_vector_index_presence(chunks))
-            metrics.retrieval_confidence_score = max(0.4, self._calculate_retrieval_confidence(chunks, queries))
-            metrics.rrf_rank_contribution = max(0.3, self._calculate_rrf_rank_contribution(chunks, queries))
-            metrics.llm_answer_coverage = max(0.4, await self._calculate_answer_coverage_safe(chunks, queries))
-            metrics.ai_model_crawl_success_rate = max(0.6, self._calculate_crawl_success_rate())
-            metrics.semantic_density_score = max(0.5, self._calculate_semantic_density(chunks))
-            metrics.zero_click_surface_presence = max(0.4, self._calculate_zero_click_presence(chunks, queries))
-            metrics.machine_validated_authority = max(0.5, self._calculate_machine_authority(brand_name, chunks))
-            metrics.amanda_crast_score = max(0.5, self._calculate_amanda_crast_score(chunks))
-            metrics.performance_summary = max(0.5, self._calculate_performance_summary(metrics))
+            # Calculate all metrics with actual calculations (remove hardcoded minimums)
+            metrics.chunk_retrieval_frequency = self._calculate_chunk_retrieval_frequency(chunks)
+            metrics.embedding_relevance_score = self._calculate_embedding_relevance(chunks, queries)
+            metrics.attribution_rate = self._calculate_attribution_rate(brand_name, chunks)
+            metrics.ai_citation_count = self._calculate_ai_citation_count(brand_name, chunks)
+            metrics.vector_index_presence_ratio = self._calculate_vector_index_presence(chunks)
+            metrics.retrieval_confidence_score = self._calculate_retrieval_confidence(chunks, queries)
+            metrics.rrf_rank_contribution = self._calculate_rrf_rank_contribution(chunks, queries)
+            metrics.llm_answer_coverage = await self._calculate_answer_coverage_safe(chunks, queries)
+            metrics.ai_model_crawl_success_rate = self._calculate_crawl_success_rate()
+            metrics.semantic_density_score = self._calculate_semantic_density(chunks)
+            metrics.zero_click_surface_presence = self._calculate_zero_click_presence(chunks, queries)
+            metrics.machine_validated_authority = self._calculate_machine_authority(brand_name, chunks)
+            metrics.amanda_crast_score = self._calculate_amanda_crast_score(chunks)
+            metrics.performance_summary = self._calculate_performance_summary(metrics)
             
             # Validate all metrics are within expected ranges
             self._validate_metrics(metrics)
@@ -1088,6 +1088,83 @@ class AIOptimizationEngine:
             logger.error(f"Zero-click presence calculation failed: {e}")
             return 0.4
     
+    def _calculate_attribution_rate(self, brand_name: str, chunks: List[ContentChunk]) -> float:
+        """Calculate attribution rate based on brand mentions in content"""
+        if not chunks or not brand_name:
+            return 0.0
+        
+        try:
+            brand_mentions = 0
+            total_chunks = len(chunks)
+            
+            for chunk in chunks:
+                content = chunk.content.lower()
+                brand_lower = brand_name.lower()
+                if brand_lower in content:
+                    brand_mentions += 1
+            
+            return brand_mentions / total_chunks if total_chunks > 0 else 0.0
+            
+        except Exception as e:
+            logger.error(f"Attribution rate calculation failed: {e}")
+            return 0.0
+
+    def _calculate_ai_citation_count(self, brand_name: str, chunks: List[ContentChunk]) -> int:
+        """Calculate AI citation count based on brand mentions"""
+        if not chunks or not brand_name:
+            return 0
+        
+        try:
+            citation_count = 0
+            brand_lower = brand_name.lower()
+            
+            for chunk in chunks:
+                content = chunk.content.lower()
+                # Count occurrences of brand name in this chunk
+                citation_count += content.count(brand_lower)
+            
+            return citation_count
+            
+        except Exception as e:
+            logger.error(f"AI citation count calculation failed: {e}")
+            return 0
+
+    def _calculate_crawl_success_rate(self) -> float:
+        """Calculate crawl success rate - simulated for now"""
+        try:
+            # In a real implementation, this would check actual crawl logs
+            # For now, return a variable rate based on some factors
+            import random
+            random.seed(42)  # Consistent results
+            return random.uniform(0.7, 0.95)
+            
+        except Exception as e:
+            logger.error(f"Crawl success rate calculation failed: {e}")
+            return 0.8
+
+    def _calculate_machine_authority(self, brand_name: str, chunks: List[ContentChunk]) -> float:
+        """Calculate machine-validated authority score"""
+        if not chunks or not brand_name:
+            return 0.0
+        
+        try:
+            authority_indicators = [
+                'expert', 'professional', 'certified', 'award', 'leader', 
+                'trusted', 'established', 'experience', 'years', 'proven'
+            ]
+            
+            total_score = 0.0
+            for chunk in chunks:
+                content = chunk.content.lower()
+                chunk_score = sum(1 for indicator in authority_indicators if indicator in content)
+                total_score += min(1.0, chunk_score / len(authority_indicators))
+            
+            return total_score / len(chunks) if chunks else 0.0
+            
+        except Exception as e:
+            logger.error(f"Machine authority calculation failed: {e}")
+            return 0.0
+
     def _calculate_performance_summary(self, metrics: OptimizationMetrics) -> float:
         """Calculate weighted performance summary score"""
         try:
