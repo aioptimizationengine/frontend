@@ -507,108 +507,108 @@ async def analyze_brand(
                 # Find or create brand
                 brand = db.query(Brand).filter(Brand.name == request.brand_name).first()
                 if not brand:
-                # Infer industry from product categories if available
-                inferred_industry = ""
-                if request.product_categories:
-                    # Simple industry inference from first category
-                    first_category = request.product_categories[0].lower()
-                    industry_mapping = {
-                        'software': 'Technology',
-                        'tech': 'Technology', 
-                        'app': 'Technology',
-                        'saas': 'Technology',
-                        'clothing': 'Fashion & Retail',
-                        'fashion': 'Fashion & Retail',
-                        'retail': 'Fashion & Retail',
-                        'food': 'Food & Beverage',
-                        'restaurant': 'Food & Beverage',
-                        'beverage': 'Food & Beverage',
-                        'health': 'Healthcare',
-                        'medical': 'Healthcare',
-                        'fitness': 'Healthcare',
-                        'finance': 'Financial Services',
-                        'banking': 'Financial Services',
-                        'insurance': 'Financial Services',
-                        'education': 'Education',
-                        'learning': 'Education',
-                        'automotive': 'Automotive',
-                        'car': 'Automotive',
-                        'travel': 'Travel & Hospitality',
-                        'hotel': 'Travel & Hospitality',
-                        'real estate': 'Real Estate',
-                        'property': 'Real Estate'
-                    }
+                    # Infer industry from product categories if available
+                    inferred_industry = ""
+                    if request.product_categories:
+                        # Simple industry inference from first category
+                        first_category = request.product_categories[0].lower()
+                        industry_mapping = {
+                            'software': 'Technology',
+                            'tech': 'Technology', 
+                            'app': 'Technology',
+                            'saas': 'Technology',
+                            'clothing': 'Fashion & Retail',
+                            'fashion': 'Fashion & Retail',
+                            'retail': 'Fashion & Retail',
+                            'food': 'Food & Beverage',
+                            'restaurant': 'Food & Beverage',
+                            'beverage': 'Food & Beverage',
+                            'health': 'Healthcare',
+                            'medical': 'Healthcare',
+                            'fitness': 'Healthcare',
+                            'finance': 'Financial Services',
+                            'banking': 'Financial Services',
+                            'insurance': 'Financial Services',
+                            'education': 'Education',
+                            'learning': 'Education',
+                            'automotive': 'Automotive',
+                            'car': 'Automotive',
+                            'travel': 'Travel & Hospitality',
+                            'hotel': 'Travel & Hospitality',
+                            'real estate': 'Real Estate',
+                            'property': 'Real Estate'
+                        }
+                        
+                        for keyword, industry in industry_mapping.items():
+                            if keyword in first_category:
+                                inferred_industry = industry
+                                break
+                        
+                        if not inferred_industry:
+                            inferred_industry = request.product_categories[0].title()
                     
-                    for keyword, industry in industry_mapping.items():
-                        if keyword in first_category:
-                            inferred_industry = industry
-                            break
-                    
-                    if not inferred_industry:
-                        inferred_industry = request.product_categories[0].title()
-                
-                brand = Brand(
-                    name=request.brand_name,
-                    website_url=request.website_url,
-                    industry=inferred_industry
-                )
-                db.add(brand)
-                db.commit()
-                db.refresh(brand)
-                logger.info(f"Created new brand: {brand.name} with ID: {brand.id}")
-                
-                # Create user-brand association if user exists
-                if current_user:
-                    user_brand = UserBrand(
-                        user_id=current_user.id,
-                        brand_id=brand.id,
-                        role='admin'
+                    brand = Brand(
+                        name=request.brand_name,
+                        website_url=request.website_url,
+                        industry=inferred_industry
                     )
-                    db.add(user_brand)
+                    db.add(brand)
                     db.commit()
-                    logger.info(f"Created user-brand association for user: {current_user.id}")
-            else:
-                logger.info(f"Found existing brand: {brand.name} with ID: {brand.id}")
+                    db.refresh(brand)
+                    logger.info(f"Created new brand: {brand.name} with ID: {brand.id}")
+                    
+                    # Create user-brand association if user exists
+                    if current_user:
+                        user_brand = UserBrand(
+                            user_id=current_user.id,
+                            brand_id=brand.id,
+                            role='admin'
+                        )
+                        db.add(user_brand)
+                        db.commit()
+                        logger.info(f"Created user-brand association for user: {current_user.id}")
+                else:
+                    logger.info(f"Found existing brand: {brand.name} with ID: {brand.id}")
             
-            # Create analysis record with comprehensive data for dashboard
-            metrics_data = {
-                **optimization_metrics,
-                "queries": semantic_queries,
-                "product_categories": request.product_categories,
-                "brand_mentions": summary.get("brand_mentions", 0),
-                "visibility_score": summary.get("visibility_score", 0.0),
-                "total_queries": summary.get("total_queries", 0),
-                "tested_queries": summary.get("tested_queries", 0),
-                "success_rate": summary.get("success_rate", 0.0),
-                "query_analysis": query_analysis,
-                "performance_summary": performance_summary,
-                "competitors": competitors_overview
-            }
-            
-            # Log metrics data structure for debugging
-            logger.info(f"Saving analysis metrics with keys: {list(metrics_data.keys())}")
-            logger.info(f"Competitors data type: {type(competitors_overview)}, count: {len(competitors_overview) if isinstance(competitors_overview, list) else 'N/A'}")
-            
-            analysis = Analysis(
-                brand_id=brand.id,
-                status="completed",
-                analysis_type="comprehensive",
-                data_source="real" if use_real_tracking_env.lower() in {"1", "true", "yes", "y", "on"} else "simulated",
-                metrics=metrics_data,
-                recommendations=analysis_result.get("priority_recommendations", []),
-                processing_time=processing_time,
-                started_at=datetime.fromtimestamp(analysis_start),
-                completed_at=datetime.now()
-            )
-            db.add(analysis)
-            db.commit()
-            db.refresh(analysis)
-            
-            analysis_id = str(analysis.id)
-            logger.info(f"Analysis saved to database with ID: {analysis_id}")
-            logger.info(f"Saved metrics keys: {list(analysis.metrics.keys()) if analysis.metrics else 'None'}")
-            if analysis.metrics and 'competitors' in analysis.metrics:
-                logger.info(f"Saved competitors count: {len(analysis.metrics['competitors'])}")
+                # Create analysis record with comprehensive data for dashboard
+                metrics_data = {
+                    **optimization_metrics,
+                    "queries": semantic_queries,
+                    "product_categories": request.product_categories,
+                    "brand_mentions": summary.get("brand_mentions", 0),
+                    "visibility_score": summary.get("visibility_score", 0.0),
+                    "total_queries": summary.get("total_queries", 0),
+                    "tested_queries": summary.get("tested_queries", 0),
+                    "success_rate": summary.get("success_rate", 0.0),
+                    "query_analysis": query_analysis,
+                    "performance_summary": performance_summary,
+                    "competitors": competitors_overview
+                }
+                
+                # Log metrics data structure for debugging
+                logger.info(f"Saving analysis metrics with keys: {list(metrics_data.keys())}")
+                logger.info(f"Competitors data type: {type(competitors_overview)}, count: {len(competitors_overview) if isinstance(competitors_overview, list) else 'N/A'}")
+                
+                analysis = Analysis(
+                    brand_id=brand.id,
+                    status="completed",
+                    analysis_type="comprehensive",
+                    data_source="real" if use_real_tracking_env.lower() in {"1", "true", "yes", "y", "on"} else "simulated",
+                    metrics=metrics_data,
+                    recommendations=analysis_result.get("priority_recommendations", []),
+                    processing_time=processing_time,
+                    started_at=datetime.fromtimestamp(analysis_start),
+                    completed_at=datetime.now()
+                )
+                db.add(analysis)
+                db.commit()
+                db.refresh(analysis)
+                
+                analysis_id = str(analysis.id)
+                logger.info(f"Analysis saved to database with ID: {analysis_id}")
+                logger.info(f"Saved metrics keys: {list(analysis.metrics.keys()) if analysis.metrics else 'None'}")
+                if analysis.metrics and 'competitors' in analysis.metrics:
+                    logger.info(f"Saved competitors count: {len(analysis.metrics['competitors'])}")
             
             except Exception as db_error:
                 db.rollback()
