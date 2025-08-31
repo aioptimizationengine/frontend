@@ -1662,7 +1662,7 @@ class AIOptimizationEngine:
             logger.warning(f"Invalid citation count: {metrics.ai_citation_count}, setting to 0")
             metrics.ai_citation_count = 0
 
-    # ==================== MISSING HELPER METHODS (IMPLEMENTED) ====================
+    # ==================== BRAND ANALYSIS METHODS ====================
 
     def _calculate_brand_strength_score(self, brand_name: str) -> float:
         """Score 0-1 based on length, uniqueness, and consonant ratio, with hash-based consistency."""
@@ -1680,7 +1680,8 @@ class AIOptimizationEngine:
             h = int(hashlib.md5(name.encode()).hexdigest()[:4], 16)
             jitter = (h % 15) / 100.0  # 0.00-0.14
             return max(0.0, min(1.0, round(base * 0.85 + jitter, 4)))
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error in _calculate_brand_strength_score: {e}")
             return 0.5
 
     def _calculate_brand_visibility_potential(self, brand_name: str) -> float:
