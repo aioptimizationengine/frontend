@@ -383,15 +383,11 @@ async def analyze_brand(
         # Create summary for dashboard compatibility
         summary = {
             "total_queries": query_analysis.get("total_queries_generated", len(semantic_queries)),
-            "brand_mentions": summary.get("brand_mentions", 0),
-            "avg_position": 3.2,  # Simulated average position
+            "brand_mentions": query_analysis.get("brand_mentions", optimization_metrics.get('ai_citation_count', 0)),
+            "avg_position": query_analysis.get("summary", {}).get("avg_position", 3.2),
             "visibility_score": performance_summary.get('overall_score', 0) * 100,
-            "total_queries": summary.get("total_queries", 0),
             "tested_queries": query_analysis.get("tested_queries", 0),
-            "success_rate": query_analysis.get("success_rate", 0.0),
-            "query_analysis": query_analysis,
-            "performance_summary": performance_summary,
-            "competitors": analysis_result.get("competitors_overview", [])
+            "success_rate": query_analysis.get("success_rate", 0.0)
         }
         
         # Create SEO analysis structure
