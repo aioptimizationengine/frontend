@@ -9,7 +9,8 @@ import time
 import json
 import logging
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
+import math
 import asyncio
 import structlog
 from fastapi import FastAPI, HTTPException, Depends, Request, status
@@ -29,9 +30,35 @@ setup_logging()
 logger = logging.getLogger(__name__)
 logger.info("API service starting with configured logging")
 
+def sanitize_for_json(obj: Any) -> Any:
+    """
+    Recursively sanitize data to ensure JSON serialization compatibility.
+    Handles NaN, infinity, and other non-serializable values.
+    """
+    if obj is None:
+        return None
+    elif isinstance(obj, (int, str, bool)):
+        return obj
+    elif isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return 0.0
+        return obj
+    elif isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [sanitize_for_json(item) for item in obj]
+    else:
+        # For other types, try to convert to string as fallback
+        try:
+            return str(obj)
+        except:
+            return None
+
 # Essential imports - must work for API to function
-from database import get_db, check_database_health
+from database import get_db, check_database_health, get_database_session
 from db_models import Brand, User, Analysis, UserRole, UserBrand
+from models import StandardResponse, ErrorResponse, User, Brand, Analysis, UserBrand
+from auth_utils import get_current_user_optional
 from models import StandardResponse, ErrorResponse
 from auth_utils import get_current_user
 from typing import Optional
@@ -597,39 +624,45 @@ async def analyze_brand(
             success=True
         )
 
+        # Prepare response data and sanitize for JSON serialization
+        response_data = {
+            "analysis_id": analysis_id,
+            "brand_name": request.brand_name,
+            "analysis_results": analysis_results,
+            "summary": summary,
+            "competitors_overview": competitors_overview,
+            "competitor_analysis": {
+                "total_competitors": len(competitors_overview),
+                "competitors_analyzed": len([c for c in competitors_overview if 'error' not in c]),
+                "competitors_failed": len([c for c in competitors_overview if 'error' in c]),
+                "competitors": competitors_overview,
+                "comparison_metrics": {
+                    "brand_performance": {
+                        "brand_mentions": summary.get("brand_mentions", 0),
+                        "success_rate": summary.get("success_rate", 0.0),
+                        "avg_position": summary.get("avg_position", 5.0)
+                    },
+                    "competitor_average": {
+                        "avg_mentions": float(sum(c.get('brand_mentions', 0) for c in competitors_overview if 'error' not in c) / max(1, len([c for c in competitors_overview if 'error' not in c]))),
+                        "avg_success_rate": float(sum(c.get('success_rate', 0) for c in competitors_overview if 'error' not in c) / max(1, len([c for c in competitors_overview if 'error' not in c]))),
+                        "avg_position": float(sum(c.get('avg_position', 5) for c in competitors_overview if 'error' not in c) / max(1, len([c for c in competitors_overview if 'error' not in c])))
+                    }
+                }
+            },
+            "seo_analysis": seo_analysis,
+            "query_analysis": query_analysis,
+            "optimization_metrics": optimization_metrics,
+            "performance_summary": performance_summary,
+            # Provide full engine output for richer UI sections that can leverage it
+            "engine_output": analysis_result
+        }
+        
+        # Sanitize all data to prevent JSON serialization errors
+        sanitized_data = sanitize_for_json(response_data)
+        
         return StandardResponse(
             success=True,
-            data={
-                "analysis_id": analysis_id,
-                "brand_name": request.brand_name,
-                "analysis_results": analysis_results,
-                "summary": summary,
-                "competitors_overview": competitors_overview,
-                "competitor_analysis": {
-                    "total_competitors": len(competitors_overview),
-                    "competitors_analyzed": len([c for c in competitors_overview if 'error' not in c]),
-                    "competitors_failed": len([c for c in competitors_overview if 'error' in c]),
-                    "competitors": competitors_overview,
-                    "comparison_metrics": {
-                        "brand_performance": {
-                            "brand_mentions": summary.get("brand_mentions", 0),
-                            "success_rate": summary.get("success_rate", 0.0),
-                            "avg_position": summary.get("avg_position", 5.0)
-                        },
-                        "competitor_average": {
-                            "avg_mentions": sum(c.get('brand_mentions', 0) for c in competitors_overview if 'error' not in c) / max(1, len([c for c in competitors_overview if 'error' not in c])),
-                            "avg_success_rate": sum(c.get('success_rate', 0) for c in competitors_overview if 'error' not in c) / max(1, len([c for c in competitors_overview if 'error' not in c])),
-                            "avg_position": sum(c.get('avg_position', 5) for c in competitors_overview if 'error' not in c) / max(1, len([c for c in competitors_overview if 'error' not in c]))
-                        }
-                    }
-                },
-                "seo_analysis": seo_analysis,
-                "query_analysis": query_analysis,
-                "optimization_metrics": optimization_metrics,
-                "performance_summary": performance_summary,
-                # Provide full engine output for richer UI sections that can leverage it
-                "engine_output": analysis_result
-            }
+            data=sanitized_data
         )
         
     except HTTPException as he:
