@@ -290,7 +290,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={
             "success": False,
             "error": "Internal server error",
-            "timestamp": datetime.now().isoformat()
+            "detail": str(exc)
         }
     )
 
@@ -1357,20 +1357,20 @@ async def get_brand_history(
             
             # Get analysis history
             analyses = db.query(Analysis).filter(Analysis.brand_id == brand.id).order_by(Analysis.created_at.desc()).all()
-        
-        analysis_history = []
-        for analysis in analyses:
-            analysis_history.append({
-                "id": str(analysis.id),
-                "status": analysis.status,
-                "analysis_type": analysis.analysis_type,
-                "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
-                "completed_at": analysis.completed_at.isoformat() if analysis.completed_at else None,
-                "processing_time": analysis.processing_time,
-                "total_bot_visits_analyzed": analysis.total_bot_visits_analyzed,
-                "citation_frequency": analysis.citation_frequency
-            })
-        
+            
+            analysis_history = []
+            for analysis in analyses:
+                analysis_history.append({
+                    "id": str(analysis.id),
+                    "status": analysis.status,
+                    "analysis_type": analysis.analysis_type,
+                    "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
+                    "completed_at": analysis.completed_at.isoformat() if analysis.completed_at else None,
+                    "processing_time": analysis.processing_time,
+                    "total_bot_visits_analyzed": analysis.total_bot_visits_analyzed,
+                    "citation_frequency": analysis.citation_frequency
+                })
+            
             return StandardResponse(
                 success=True,
                 data={
