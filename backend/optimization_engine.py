@@ -129,23 +129,31 @@ class AIOptimizationEngine:
             self.model = None
         
         # Initialize API clients if keys are provided and not in test mode
-        if config.get('anthropic_api_key') and config.get('anthropic_api_key') != 'test_key':
+        anthropic_key = config.get('anthropic_api_key')
+        openai_key = config.get('openai_api_key')
+        
+        # Check for real API keys (not test_key, not empty, and reasonable length)
+        if anthropic_key and anthropic_key != 'test_key' and len(anthropic_key) > 10:
             try:
                 self.anthropic_client = anthropic.AsyncAnthropic(
-                    api_key=config['anthropic_api_key']
+                    api_key=anthropic_key
                 )
-                logger.info("Anthropic client initialized")
+                logger.info("Anthropic client initialized with real API key")
             except Exception as e:
                 logger.error(f"Failed to initialize Anthropic client: {e}")
+        else:
+            logger.warning(f"Anthropic API key not valid: {anthropic_key[:10] if anthropic_key else 'None'}...")
         
-        if config.get('openai_api_key') and config.get('openai_api_key') != 'test_key':
+        if openai_key and openai_key != 'test_key' and len(openai_key) > 10:
             try:
                 self.openai_client = openai.AsyncOpenAI(
-                    api_key=config['openai_api_key']
+                    api_key=openai_key
                 )
-                logger.info("OpenAI client initialized")
+                logger.info("OpenAI client initialized with real API key")
             except Exception as e:
                 logger.error(f"Failed to initialize OpenAI client: {e}")
+        else:
+            logger.warning(f"OpenAI API key not valid: {openai_key[:10] if openai_key else 'None'}...")
         
         # Initialize tracking manager if enabled - SET TO TRUE BY DEFAULT
         self.use_real_tracking = config.get('use_real_tracking', True)
@@ -184,6 +192,7 @@ class AIOptimizationEngine:
             # Test queries with actual LLM APIs if available (optimized for speed)
             query_analysis_results = {}
             if self.anthropic_client or self.openai_client:
+                logger.info(f"Using real LLM APIs for {brand_name} analysis")
                 try:
                     # Limit to 5 queries for faster execution
                     llm_results = await self._test_llm_responses(brand_name, queries[:5])
@@ -233,11 +242,14 @@ class AIOptimizationEngine:
                     }
                     
                 except Exception as e:
-                    logger.warning(f"LLM testing failed, using simulated results: {e}")
+                    logger.error(f"Real LLM query analysis failed: {e}")
                     # Fallback to simulated results
+                    logger.warning("Falling back to simulated query results")
                     query_analysis_results = self._create_simulated_query_results(brand_name, queries)
             else:
-                logger.info("No LLM clients available, using simulated query analysis")
+                # Use simulated results when LLM APIs are not available
+                logger.warning(f"No valid LLM API clients available for {brand_name}. Using simulated results.")
+                logger.info(f"Anthropic client: {bool(self.anthropic_client)}, OpenAI client: {bool(self.openai_client)}")
                 query_analysis_results = self._create_simulated_query_results(brand_name, queries)
             
             # 3. FULL ANALYSIS - Generate recommendations and insights
@@ -303,7 +315,8 @@ class AIOptimizationEngine:
             queries = await self._generate_semantic_queries(brand_name, product_categories or [])
             
             # Test queries across multiple AI platforms with combined results
-            if self.use_real_tracking and (self.anthropic_client or self.openai_client):
+            if self.anthropic_client or self.openai_client:
+                logger.info(f"Testing {brand_name} queries with real LLM APIs")
                 platform_results = await self._test_queries_across_platforms(brand_name, queries)
                 
                 # Extract combined query results for frontend
@@ -1298,19 +1311,22 @@ class AIOptimizationEngine:
                     # Improved brand mention detection based on actual query content
                     is_direct_brand_query = brand_name.lower() in query.lower()
                     
-                    # Calculate mention probability based on query relevance - increased for well-known brands
-                    mention_probability = 0.95 if is_direct_brand_query else 0.75
+                    # Create realistic mention probability based on brand strength
+                    import hashlib
+                    brand_hash = int(hashlib.md5(brand_name.lower().encode()).hexdigest()[:4], 16)
+                    base_brand_strength = 0.3 + (brand_hash % 40) / 100.0  # 0.3 to 0.7 base rate
                     
-                    # Add bonus for specific query types that should mention the brand
-                    if any(phrase in query.lower() for phrase in ['what is', 'tell me about', 'reviews', 'products', 'how good', 'features', 'quality']):
-                        mention_probability = min(0.98, mention_probability + 0.15)
+                    if is_direct_brand_query:
+                        mention_probability = min(0.95, base_brand_strength + 0.25)  # High for direct queries
+                    else:
+                        mention_probability = base_brand_strength  # Use base rate for indirect queries
                     
-                    # For well-known brands like Apple, increase base probability
-                    if brand_name.lower() in ['apple', 'google', 'microsoft', 'amazon', 'meta', 'tesla']:
-                        mention_probability = min(0.98, mention_probability + 0.1)
+                    # Add small bonus for informational queries
+                    if any(phrase in query.lower() for phrase in ['what is', 'tell me about', 'reviews']):
+                        mention_probability = min(0.9, mention_probability + 0.1)
                     
-                    # Use more favorable calculation for brand mentions
-                    query_brand_score = (sum(ord(c) for c in f"{query.lower()}{brand_name.lower()}") + len(brand_name) * 10) % 100
+                    # Use deterministic calculation for consistency
+                    query_brand_score = hash(f"{query.lower()}{brand_name.lower()}") % 100
                     brand_mentioned = query_brand_score < (mention_probability * 100)
                     
                     # Simulate position based on brand mention
@@ -1781,10 +1797,17 @@ class AIOptimizationEngine:
             if self.anthropic_client:
                 for query in queries[:3]:  # Reduced to 3 queries for faster execution
                     try:
+                        # Enhanced prompt for better brand detection
+                        enhanced_prompt = f"""Please answer this question as if you're a knowledgeable assistant helping someone research brands and products. Provide a helpful, informative response that mentions relevant brands, companies, or products when appropriate.
+
+Question: {query}
+
+Please provide a comprehensive answer that includes specific brand names, product details, and helpful information."""
+                        
                         response = await self.anthropic_client.messages.create(
-                            model="claude-3-haiku-20240307",  # Faster model
-                            max_tokens=100,  # Reduced tokens for speed
-                            messages=[{"role": "user", "content": query}]
+                            model="claude-3-haiku-20240307",
+                            max_tokens=200,  # Increased for better responses
+                            messages=[{"role": "user", "content": enhanced_prompt}]
                         )
                         
                         response_text = response.content[0].text
@@ -1814,10 +1837,17 @@ class AIOptimizationEngine:
             if self.openai_client:
                 for query in queries[:3]:  # Reduced to 3 queries for faster execution
                     try:
+                        # Enhanced prompt for better brand detection
+                        enhanced_prompt = f"""Please answer this question as if you're a knowledgeable assistant helping someone research brands and products. Provide a helpful, informative response that mentions relevant brands, companies, or products when appropriate.
+
+Question: {query}
+
+Please provide a comprehensive answer that includes specific brand names, product details, and helpful information."""
+                        
                         response = await self.openai_client.chat.completions.create(
                             model="gpt-3.5-turbo",
-                            max_tokens=100,  # Reduced tokens for speed
-                            messages=[{"role": "user", "content": query}]
+                            max_tokens=200,  # Increased for better responses
+                            messages=[{"role": "user", "content": enhanced_prompt}]
                         )
                         
                         response_text = response.choices[0].message.content
@@ -1866,7 +1896,7 @@ class AIOptimizationEngine:
         """Calculate simulated position based on response quality and brand mention"""
         try:
             if not brand_mentioned:
-                return 8.0  # Poor position if brand not mentioned
+                return None  # No position if brand not mentioned
             
             # Analyze response quality factors
             response_lower = response_text.lower()
@@ -1941,26 +1971,39 @@ class AIOptimizationEngine:
         total_mentions = 0
         
         for query in queries[:10]:
-            # Simulate realistic mention rates based on query type - increased for well-known brands
-            mention_probability = 0.9 if any(word in query.lower() for word in [brand_name.lower(), 'what is', 'tell me']) else 0.7
+            # Create more realistic and varied mention rates based on brand strength
+            import hashlib
+            brand_hash = int(hashlib.md5(brand_name.lower().encode()).hexdigest()[:4], 16)
+            base_brand_strength = 0.3 + (brand_hash % 40) / 100.0  # 0.3 to 0.7 base rate
             
-            # Add bonus for specific query types that should mention the brand
-            if any(phrase in query.lower() for phrase in ['what is', 'tell me about', 'reviews', 'products', 'how good', 'features', 'quality']):
-                mention_probability = min(0.95, mention_probability + 0.15)
+            # Check if it's a direct brand query
+            is_direct_query = brand_name.lower() in query.lower()
             
-            # For well-known brands like Apple, increase base probability
-            if brand_name.lower() in ['apple', 'google', 'microsoft', 'amazon', 'meta', 'tesla']:
-                mention_probability = min(0.95, mention_probability + 0.1)
+            if is_direct_query:
+                mention_probability = min(0.95, base_brand_strength + 0.25)  # High for direct queries
+            else:
+                mention_probability = base_brand_strength  # Use base rate for indirect queries
             
-            # Use more favorable calculation for brand mentions
-            query_brand_score = (sum(ord(c) for c in f"{query.lower()}{brand_name.lower()}") + len(brand_name) * 10) % 100
-            mentioned = query_brand_score < (mention_probability * 100)
+            # Add small bonus for informational queries
+            if any(phrase in query.lower() for phrase in ['what is', 'tell me about', 'reviews']):
+                mention_probability = min(0.9, mention_probability + 0.1)
+            
+            # Use deterministic calculation based on query and brand for consistency
+            query_seed = hash(f"{query.lower()}{brand_name.lower()}") % 100
+            mentioned = query_seed < (mention_probability * 100)
             
             if mentioned:
                 total_mentions += 1
             
-            # Assign a plausible position when the brand is mentioned
-            position = random.randint(1, 5) if mentioned else None
+            # Assign a more realistic position when the brand is mentioned (1-10 scale)
+            if mentioned:
+                # Better positions for direct brand queries
+                if brand_name.lower() in query.lower():
+                    position = random.randint(1, 3)  # Top 3 for direct brand queries
+                else:
+                    position = random.randint(2, 7)  # Positions 2-7 for indirect mentions
+            else:
+                position = None
             
             query_results.append({
                 'query': query,
@@ -1983,29 +2026,32 @@ class AIOptimizationEngine:
         
         # Calculate average position from simulated results (only where brand is mentioned)
         positions = [q.get('position') for q in query_results if q.get('brand_mentioned') and q.get('position') is not None]
-        avg_position = sum(positions) / len(positions) if positions else 5.0
+        avg_position = sum(positions) / len(positions) if positions else None
+        
+        # Calculate success rate properly
+        success_rate = (total_mentions / total_tested) if total_tested > 0 else 0.0
         
         summary = {
             "total_queries": len(queries),
             "brand_mentions": total_mentions,
-            "avg_position": avg_position,
+            "avg_position": avg_position if avg_position is not None else 0.0,
             "visibility_score": visibility_score,
             "tested_queries": total_tested,
-            "success_rate": (total_mentions / max(1, total_tested))
+            "success_rate": success_rate
         }
         
         return {
             "total_queries_generated": len(queries),
             "tested_queries": total_tested,
-            "success_rate": (total_mentions / max(1, total_tested)),
+            "success_rate": success_rate,
             "brand_mentions": total_mentions,
             "all_queries": query_results,
             "platform_breakdown": {"simulated": total_tested},
             "summary_metrics": {
                 "total_mentions": total_mentions,
                 "total_tests": total_tested,
-                "avg_position": avg_position,
-                "overall_score": visibility_score / 100.0,
+                "avg_position": avg_position if avg_position is not None else 0.0,
+                "overall_score": success_rate,  # Use success rate as overall score
                 "platforms_tested": ["simulated"]
             },
             "summary": summary

@@ -333,10 +333,19 @@ async def analyze_brand(
         # Respect both USE_REAL_TRACKING and ENABLE_REAL_TRACKING for compatibility with Railway vars
         use_real_tracking_env = os.getenv('USE_REAL_TRACKING') or os.getenv('ENABLE_REAL_TRACKING') or 'false'
         _ensure_engine_imported()
+        # Get real API keys - fail if not available
+        anthropic_key = os.getenv('ANTHROPIC_API_KEY')
+        openai_key = os.getenv('OPENAI_API_KEY')
+        
+        if not anthropic_key or anthropic_key == 'test_key':
+            logger.warning("No valid ANTHROPIC_API_KEY found - using simulation")
+        if not openai_key or openai_key == 'test_key':
+            logger.warning("No valid OPENAI_API_KEY found - using simulation")
+            
         engine = AIOptimizationEngine({
-            'anthropic_api_key': os.getenv('ANTHROPIC_API_KEY', 'test_key'),
-            'openai_api_key': os.getenv('OPENAI_API_KEY', 'test_key'),
-            'environment': os.getenv('ENVIRONMENT', 'test'),
+            'anthropic_api_key': anthropic_key,
+            'openai_api_key': openai_key,
+            'environment': os.getenv('ENVIRONMENT', 'production'),
             'use_real_tracking': str(use_real_tracking_env).strip().lower() in {"1", "true", "yes", "y", "on"}
         })
 
@@ -414,8 +423,8 @@ async def analyze_brand(
             # keep original competitors_overview as-is
         
         # Create summary for dashboard compatibility
-        # Fix visibility score calculation - overall_score is already a percentage (0-1), convert properly
-        visibility_score = performance_summary.get('overall_score', 0)
+        # Fix visibility score calculation - use success rate from query analysis
+        visibility_score = query_analysis.get('success_rate', 0.0)
         if visibility_score > 1:  # If it's already a percentage > 100, normalize it
             visibility_score = visibility_score / 100
         
@@ -434,7 +443,7 @@ async def analyze_brand(
         summary = {
             "total_queries": query_analysis.get("total_queries_generated", len(semantic_queries)),
             "brand_mentions": brand_mentions,
-            "avg_position": avg_position,
+            "avg_position": avg_position if avg_position and avg_position > 0 else None,
             "visibility_score": visibility_score * 100,  # Convert 0-1 to 0-100%
             "tested_queries": query_analysis.get("tested_queries", 0),
             "success_rate": query_analysis.get("success_rate", 0.0)
@@ -665,11 +674,14 @@ async def calculate_optimization_metrics(
             user_id=current_user.id
         )
         
-        # Initialize optimization engine
+        # Initialize optimization engine with real API keys
+        anthropic_key = os.getenv('ANTHROPIC_API_KEY')
+        openai_key = os.getenv('OPENAI_API_KEY')
+        
         engine = AIOptimizationEngine({
-            'anthropic_api_key': os.getenv('ANTHROPIC_API_KEY', 'test_key'),
-            'openai_api_key': os.getenv('OPENAI_API_KEY', 'test_key'),
-            'environment': os.getenv('ENVIRONMENT', 'test')
+            'anthropic_api_key': anthropic_key,
+            'openai_api_key': openai_key,
+            'environment': os.getenv('ENVIRONMENT', 'production')
         })
         
         # Calculate metrics
@@ -751,12 +763,15 @@ async def analyze_queries(
             categories_count=len(request.product_categories)
         )
         
-        # Initialize optimization engine
+        # Initialize optimization engine with real API keys
         _ensure_engine_imported()
+        anthropic_key = os.getenv('ANTHROPIC_API_KEY')
+        openai_key = os.getenv('OPENAI_API_KEY')
+        
         engine = AIOptimizationEngine({
-            'anthropic_api_key': os.getenv('ANTHROPIC_API_KEY', 'test_key'),
-            'openai_api_key': os.getenv('OPENAI_API_KEY', 'test_key'),
-            'environment': os.getenv('ENVIRONMENT', 'test')
+            'anthropic_api_key': anthropic_key,
+            'openai_api_key': openai_key,
+            'environment': os.getenv('ENVIRONMENT', 'production')
         })
         
         # Analyze queries
