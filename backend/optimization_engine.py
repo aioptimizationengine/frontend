@@ -1412,7 +1412,13 @@ class AIOptimizationEngine:
         """Test queries across multiple AI platforms and combine results under each unique query"""
         try:
             logger.info(f"Testing {len(queries)} queries across multiple platforms for {brand_name}")
-{{ ... }}
+            return {
+                'total_responses': 0,
+                'platform_breakdown': {}
+            }
+        except Exception as e:
+            logger.error(f"Query testing failed: {e}")
+            return {
                 'total_responses': 0,
                 'platform_breakdown': {}
             }
