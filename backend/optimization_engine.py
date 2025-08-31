@@ -1338,93 +1338,131 @@ class AIOptimizationEngine:
         return contexts.get(industry, 'competitive market environment')
 
     async def _generate_semantic_queries(self, brand_name: str, product_categories: List[str]) -> List[str]:
-        """Generate intelligent semantic queries based on brand research and context"""
+        """Generate intelligent semantic queries based on brand research and context, with optional LLM assistance."""
         try:
             # Step 1: Research brand context first
             brand_context = await self._research_brand_context(brand_name, product_categories)
-            
-            queries = []
+
+            queries: List[str] = []
             industry = brand_context['industry']
             brand_type = brand_context['brand_type']
             insights = brand_context['insights']
-            
+
             logger.info(f"Generating queries for {brand_name} ({industry} industry, {brand_type} type)")
-            
-            # Step 2: Generate industry-aware base queries
-            base_queries = self._generate_industry_specific_queries(brand_name, industry, brand_type)
-            queries.extend(base_queries)
-            
-            # Step 3: Generate audience-specific queries
-            for audience in insights['target_audience']:
-                audience_queries = [
+
+            # Step 2: If LLM clients are available, attempt LLM-backed query generation (merge + dedupe)
+            llm_queries: List[str] = []
+            try:
+                if self.anthropic_client or self.openai_client:
+                    llm_queries = await self._llm_generate_queries(brand_name, product_categories, brand_context)
+            except Exception as e:
+                logger.warning(f"LLM-backed query generation failed, will use heuristic only: {e}")
+
+            # Industry-specific base queries
+            base_industry_queries = self._generate_industry_specific_queries(brand_name, industry, brand_type)
+            queries.extend(base_industry_queries)
+
+            # Use cases and differentiators to expand queries
+            for audience in insights.get('target_audience', []):
+                queries.extend([
                     f"Is {brand_name} good for {audience}?",
                     f"{brand_name} benefits for {audience}",
-                    f"How {audience} use {brand_name}"
-                ]
-                queries.extend(audience_queries)
-            
-            # Step 4: Generate differentiator-based queries
-            for differentiator in insights['key_differentiators']:
-                diff_queries = [
-                    f"{brand_name} {differentiator}",
-                    f"How {brand_name} ensures {differentiator}"
-                ]
-                queries.extend(diff_queries)
-            
-            # Step 5: Generate use case queries
-            for use_case in insights['common_use_cases']:
-                use_case_queries = [
-                    f"{brand_name} for {use_case}",
-                    f"Best {use_case} solution {brand_name}"
-                ]
-                queries.extend(use_case_queries)
-            
-            # Step 6: Generate competitive and comparison queries
-            competitive_queries = [
-                f"{brand_name} vs competitors",
-                f"Why choose {brand_name} over alternatives",
-                f"{brand_name} market position",
-                f"Is {brand_name} the best choice",
-                f"{brand_name} compared to industry leaders"
-            ]
-            queries.extend(competitive_queries)
-            
-            # Step 7: Generate decision-making queries
-            decision_queries = [
-                f"Should I choose {brand_name}?",
-                f"{brand_name} pros and cons",
-                f"Is {brand_name} worth it?",
-                f"{brand_name} customer reviews",
-                f"Problems with {brand_name}",
-                f"{brand_name} reliability"
-            ]
-            queries.extend(decision_queries)
-            
-            # Step 8: Add category-specific queries if provided
-            if product_categories:
-                for category in product_categories[:2]:  # Limit to 2 categories
-                    category_queries = [
-                        f"Best {category} from {brand_name}",
-                        f"{brand_name} {category} review",
-                        f"{brand_name} {category} features"
-                    ]
-                    queries.extend(category_queries)
-            
-            # Remove duplicates and expand to 60+ queries for comprehensive analysis
-            unique_queries = list(dict.fromkeys(queries))[:60]
-            
+                    f"How {audience} use {brand_name}",
+                ])
+
+            for diff in insights.get('key_differentiators', []):
+                queries.extend([
+                    f"{brand_name} {diff}",
+                    f"How {brand_name} handles {diff}",
+                    f"{brand_name} {diff} comparison",
+                ])
+
+            # Add product category specific queries
+            for category in product_categories or []:
+                queries.extend([
+                    f"{brand_name} {category} pricing",
+                    f"{brand_name} {category} vs alternatives",
+                    f"{brand_name} {category} integration",
+                    f"{brand_name} {category} review",
+                    f"{brand_name} {category} features",
+                ])
+
+            # Merge LLM queries (if any), then dedupe and cap
+            all_queries: List[str] = []
+            if llm_queries:
+                cleaned = [q.strip() for q in llm_queries if isinstance(q, str) and q.strip()]
+                all_queries.extend(cleaned)
+            all_queries.extend(queries)
+
+            # Remove duplicates and cap at 60
+            unique_queries = list(dict.fromkeys(all_queries))[:60]
+
             logger.info(f"Generated {len(unique_queries)} intelligent queries for {brand_name} based on {industry} industry research")
             return unique_queries
-            
+
         except Exception as e:
             logger.error(f"Intelligent query generation failed: {e}")
             # Fallback to basic queries
             return self._generate_fallback_queries(brand_name)
 
+    async def _llm_generate_queries(self, brand_name: str, product_categories: List[str], brand_context: Dict[str, Any]) -> List[str]:
+        """Use Anthropic/OpenAI to propose semantic queries for the brand. Returns a list, falls back to []."""
+        prompt = (
+            "You are helping generate search-style queries to evaluate a brand's presence in AI answers. "
+            "Return 20-40 short, diverse queries (no numbering, one per line) suited to testing whether the brand is mentioned.\n"
+            f"Brand: {brand_name}\n"
+            f"Industry: {brand_context.get('industry','unknown')}\n"
+            f"Brand type: {brand_context.get('brand_type','general')}\n"
+            f"Use cases: {', '.join(self._identify_use_cases(brand_name, brand_context.get('industry','general business')))}\n"
+            f"Product categories: {', '.join(product_categories or [])}\n"
+            "Focus on realistic user intents (what, how, pricing, comparison, integration, benefits, reviews, alternatives)."
+        )
+        results: List[str] = []
+        # Try Anthropic first
+        try:
+            if self.anthropic_client:
+                msg = await self.anthropic_client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=400,
+                    temperature=0.5,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                text = "".join(block.get("text", "") for block in (getattr(msg, 'content', None) or []) if isinstance(block, dict))
+                if not text:
+                    text = getattr(msg, 'text', '') or ''
+                lines = [l.strip("- •\t ") for l in text.splitlines()]
+                results = [l for l in lines if l]
+        except Exception as e:
+            logger.info(f"Anthropic query gen failed: {e}")
+
+        # If none, try OpenAI
+        if not results:
+            try:
+                if self.openai_client:
+                    completion = await self.openai_client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        temperature=0.5,
+                        messages=[
+                            {"role": "system", "content": "You return only queries, one per line, no numbering."},
+                            {"role": "user", "content": prompt},
+                        ],
+                    )
+                    text = completion.choices[0].message.content if completion and completion.choices else ""
+                    lines = [l.strip("- •\t ") for l in (text or '').splitlines()]
+                    results = [l for l in lines if l]
+            except Exception as e:
+                logger.info(f"OpenAI query gen failed: {e}")
+
+        # Light filtering
+        results = [q for q in results if brand_name.lower() in q.lower() or len(q.split()) >= 2]
+        # Keep reasonable bounds
+        return results[:40]
+
     def _generate_industry_specific_queries(self, brand_name: str, industry: str, brand_type: str) -> List[str]:
         """Generate industry-specific base queries"""
         queries = []
         
+{{ ... }}
         # Universal base queries
         base = [
             f"What is {brand_name}?",

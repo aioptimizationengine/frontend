@@ -468,14 +468,15 @@ async def analyze_brand(
             # keep original competitors_overview as-is
         
         # Create summary for dashboard compatibility
-        # Fix visibility score calculation - use success rate from query analysis
-        visibility_score = query_analysis.get('success_rate', 0.0)
-        if visibility_score > 1:  # If it's already a percentage > 100, normalize it
-            visibility_score = visibility_score / 100
-        
-        # Ensure visibility_score is never None or NaN
-        if visibility_score is None or visibility_score != visibility_score:  # Check for NaN
+        # Visibility score is derived from success_rate; normalize to a 0–1 range
+        visibility_score = query_analysis.get('success_rate', 0.0) or 0.0
+        # If provided as percentage (0–100), convert to 0–1
+        if isinstance(visibility_score, (int, float)) and visibility_score > 1:
+            visibility_score = visibility_score / 100.0
+        # Handle NaN/None and clamp to [0,1]
+        if visibility_score is None or not isinstance(visibility_score, (int, float)) or (isinstance(visibility_score, float) and (visibility_score != visibility_score)):
             visibility_score = 0.0
+        visibility_score = max(0.0, min(1.0, float(visibility_score)))
         
         # Get brand mentions from query analysis first, fallback to optimization metrics
         brand_mentions = query_analysis.get("brand_mentions", 0)
@@ -493,9 +494,11 @@ async def analyze_brand(
             "total_queries": query_analysis.get("total_queries_generated", len(semantic_queries)),
             "brand_mentions": brand_mentions,
             "avg_position": float(avg_position) if avg_position and avg_position > 0 else 5.0,
-            "visibility_score": float(visibility_score),  # Already converted to 0-100% above
+            # Keep visibility_score as 0–1 scalar; frontend formats with .1% where needed
+            "visibility_score": float(visibility_score),
             "tested_queries": query_analysis.get("tested_queries", 0),
-            "success_rate": query_analysis.get("success_rate", 0.0)
+            # Also ensure success_rate is clamped 0–1 for consistency
+            "success_rate": max(0.0, min(1.0, float(query_analysis.get("success_rate", 0.0) or 0.0)))
         }
         
         # Get priority recommendations and sanitize
