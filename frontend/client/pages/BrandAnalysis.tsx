@@ -977,16 +977,17 @@ export default function BrandAnalysis() {
                                   What's Already There
                                 </h4>
                                 <div className="space-y-2">
-                                  {analysisData.data.seo_analysis?.whats_there?.map((item, index) => (
-                                    <div key={index} className="text-sm text-green-700 flex items-start">
-                                      <span className="w-2 h-2 bg-green-500 rounded-full mr-2 mt-1.5 flex-shrink-0"></span>
-                                      <span>{item}</span>
-                                    </div>
-                                  )) || (
-                                    <div className="text-sm text-green-600 italic">
-                                      SEO analysis will show existing optimized elements here
-                                    </div>
+                                  {analysisData.data.seo_analysis?.roadmap?.filter(phase => phase.phase.includes('1'))?.map((phase, phaseIndex) => 
+                                    phase.items?.map((item, index) => (
+                                      <div key={`${phaseIndex}-${index}`} className="text-sm text-green-700 flex items-start">
+                                        <span className="w-2 h-2 bg-green-500 rounded-full mr-2 mt-1.5 flex-shrink-0"></span>
+                                        <span>{item}</span>
+                                      </div>
+                                    ))
                                   )}
+                                </div>
+                                <div className="text-sm text-green-600 italic">
+                                  SEO analysis will show existing optimized elements here
                                 </div>
                               </div>
 
@@ -997,16 +998,17 @@ export default function BrandAnalysis() {
                                   What's Needed
                                 </h4>
                                 <div className="space-y-2">
-                                  {analysisData.data.seo_analysis?.whats_needed?.map((item, index) => (
-                                    <div key={index} className="text-sm text-amber-700 flex items-start">
-                                      <span className="w-2 h-2 bg-amber-500 rounded-full mr-2 mt-1.5 flex-shrink-0"></span>
-                                      <span>{item}</span>
-                                    </div>
-                                  )) || (
-                                    <div className="text-sm text-amber-600 italic">
-                                      SEO analysis will show missing requirements here
-                                    </div>
+                                  {analysisData.data.seo_analysis?.roadmap?.filter(phase => phase.phase.includes('2'))?.map((phase, phaseIndex) => 
+                                    phase.items?.map((item, index) => (
+                                      <div key={`${phaseIndex}-${index}`} className="text-sm text-amber-700 flex items-start">
+                                        <span className="w-2 h-2 bg-amber-500 rounded-full mr-2 mt-1.5 flex-shrink-0"></span>
+                                        <span>{item}</span>
+                                      </div>
+                                    ))
                                   )}
+                                </div>
+                                <div className="text-sm text-amber-600 italic">
+                                  SEO analysis will show missing requirements here
                                 </div>
                               </div>
 
@@ -1017,21 +1019,20 @@ export default function BrandAnalysis() {
                                   What's Perfect
                                 </h4>
                                 <div className="space-y-2">
-                                  {analysisData.data.seo_analysis?.whats_perfect?.map((item, index) => (
-                                    <div key={index} className="text-sm text-emerald-700 flex items-start">
-                                      <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2 mt-1.5 flex-shrink-0"></span>
-                                      <span>{item}</span>
-                                    </div>
-                                  )) || (
-                                    <div className="text-sm text-emerald-600 italic">
-                                      SEO analysis will show perfectly optimized elements here
-                                    </div>
+                                  {analysisData.data.seo_analysis?.roadmap?.filter(phase => phase.phase.includes('3'))?.map((phase, phaseIndex) => 
+                                    phase.items?.map((item, index) => (
+                                      <div key={`${phaseIndex}-${index}`} className="text-sm text-emerald-700 flex items-start">
+                                        <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2 mt-1.5 flex-shrink-0"></span>
+                                        <span>{item}</span>
+                                      </div>
+                                    ))
                                   )}
+                                </div>
+                                <div className="text-sm text-emerald-600 italic">
+                                  SEO analysis will show perfectly optimized elements here
                                 </div>
                               </div>
                             </div>
-
-
 
                             {/* Priority Recommendations */}
                             <div className="mt-8">
@@ -1040,58 +1041,23 @@ export default function BrandAnalysis() {
                                 Priority Recommendations
                               </h3>
                               <div className="space-y-4">
-                                {analysisData.data.seo_analysis?.priority_recommendations?.map((rec: any, index: number) => (
-                                  <div key={index} className={`p-4 rounded-lg border-l-4 ${
-                                    rec.priority === 'high' ? 'border-red-500 bg-red-50' :
-                                    rec.priority === 'medium' ? 'border-yellow-500 bg-yellow-50' :
-                                    'border-green-500 bg-green-50'
-                                  }`}>
-                                    <div className="flex justify-between items-start">
-                                      <div>
-                                        <h4 className="font-semibold text-gray-900">{rec.title}</h4>
-                                        <p className="text-sm text-gray-600 mt-1">{rec.description}</p>
-                                      </div>
-                                      <Badge 
-                                        variant={
-                                          rec.priority === 'high' ? 'destructive' : 
-                                          rec.priority === 'medium' ? 'outline' : 'default'
-                                        }
-                                        className="ml-2"
-                                      >
-                                        {rec.priority.charAt(0).toUpperCase() + rec.priority.slice(1)}
-                                      </Badge>
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
-                                      <div>
-                                        <span className="text-gray-500">Impact:</span>{' '}
-                                        <span className="font-medium">{rec.impact}</span>
-                                      </div>
-                                      <div>
-                                        <span className="text-gray-500">Effort:</span>{' '}
-                                        <span className="font-medium">{rec.effort}</span>
-                                      </div>
-                                      <div>
-                                        <span className="text-gray-500">Timeline:</span>{' '}
-                                        <span className="font-medium">{rec.timeline}</span>
+                                {Array.isArray(analysisData.data.seo_analysis?.priority_recommendations) && 
+                                 analysisData.data.seo_analysis.priority_recommendations.length > 0 ? (
+                                  analysisData.data.seo_analysis.priority_recommendations.map((rec: any, index: number) => (
+                                    <div key={index} className="p-4 rounded-lg border-l-4 border-blue-500 bg-blue-50">
+                                      <div className="flex items-start justify-between">
+                                        <div className="flex-1">
+                                          <p className="text-sm text-gray-600">{typeof rec === 'string' ? rec : rec.description || rec.title || 'Recommendation'}</p>
+                                        </div>
+                                        <Badge variant="secondary" className="ml-4">
+                                          Priority
+                                        </Badge>
                                       </div>
                                     </div>
-                                    {rec.action_items && rec.action_items.length > 0 && (
-                                      <div className="mt-3 col-span-3">
-                                        <span className="text-xs font-medium text-gray-600">Action Items:</span>
-                                        <ul className="mt-1 text-xs text-gray-600 space-y-1">
-                                          {rec.action_items.map((item: string, itemIndex: number) => (
-                                            <li key={itemIndex} className="flex items-start">
-                                              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mr-2 mt-1.5 flex-shrink-0"></span>
-                                              <span>{item}</span>
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    )}
-                                  </div>
-                                )) || (
-                                  <div className="text-sm text-gray-500 italic">
-                                    No priority recommendations available
+                                  ))
+                                ) : (
+                                  <div className="text-center py-4 text-gray-500">
+                                    <p>No priority recommendations available</p>
                                   </div>
                                 )}
                               </div>

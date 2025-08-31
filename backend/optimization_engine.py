@@ -253,7 +253,7 @@ class AIOptimizationEngine:
                 query_analysis_results = self._create_simulated_query_results(brand_name, queries)
             
             # 3. FULL ANALYSIS - Generate recommendations and insights
-            recommendations = self._generate_brand_specific_recommendations(metrics, brand_name, product_categories)
+            recommendations = await self._generate_brand_specific_recommendations(metrics, brand_name, product_categories)
             
             # Create performance summary with consistent grading
             performance_summary = {

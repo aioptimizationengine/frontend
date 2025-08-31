@@ -498,9 +498,23 @@ async def analyze_brand(
             "success_rate": query_analysis.get("success_rate", 0.0)
         }
         
+        # Get priority recommendations and sanitize
+        priority_recommendations = analysis_result.get("priority_recommendations", [])
+        if hasattr(priority_recommendations, '__await__'):
+            # It's a coroutine, await it
+            try:
+                priority_recommendations = await priority_recommendations
+            except Exception as e:
+                logger.error(f"Failed to await priority_recommendations: {e}")
+                priority_recommendations = []
+        
+        # Sanitize priority_recommendations
+        if not isinstance(priority_recommendations, list):
+            priority_recommendations = []
+        
         # Create SEO analysis structure
         seo_analysis = {
-            "priority_recommendations": analysis_result.get("priority_recommendations", []),
+            "priority_recommendations": priority_recommendations,
             "roadmap": [
                 {"phase": phase_key.replace('_', ' ').title(), "items": (phase_val.get("tasks", []) if isinstance(phase_val, dict) else [])}
                 for phase_key, phase_val in implementation_roadmap.items()
