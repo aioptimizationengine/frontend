@@ -984,7 +984,7 @@ class AIOptimizationEngine:
             for chunk in chunks:
                 chunk_score = 0.0
                 
-                # Content length factor (optimal 50-150 words)
+                # Content length factor
                 word_count = getattr(chunk, 'word_count', 0)
                 if 50 <= word_count <= 150:
                     chunk_score += 0.3
@@ -1024,7 +1024,9 @@ class AIOptimizationEngine:
             # Apply scaling to ensure we use the full 0-1 range
             scaled_score = min(1.0, max(0.0, avg_score * 1.25))
             
-            return round(scaled_score, 4)  # Round to 4 decimal places for consistency
+            # Ensure score is within bounds and round for consistency
+            final_score = max(0.0, min(1.0, scaled_score))
+            return round(final_score, 4)  # Round to 4 decimal places for consistency
             
         except Exception as e:
             logger.error(f"Amanda Crast score calculation failed: {e}")
@@ -1792,44 +1794,54 @@ class AIOptimizationEngine:
             if mentioned:
                 total_mentions += 1
             
+            # Assign a plausible position when the brand is mentioned
+            position = random.randint(1, 5) if mentioned else None
+            
             query_results.append({
                 'query': query,
                 'response': f"Simulated response mentioning {brand_name}" if mentioned else "Simulated response without brand mention",
-                'brand_mentioned': mentioned
+                'brand_mentioned': mentioned,
+                'position': position
             })
+            
+            # Debug logging for tracing mention flags per query
+            try:
+                logger.debug("simulated_query_result", query=query, brand=brand_name, brand_mentioned=mentioned, position=position)
+            except Exception:
+                pass
         
         # Create summary for dashboard compatibility with proper visibility calculation
-        total_mentions = query_results.get("brand_mentions", 0)
-        total_tested = query_results.get("tested_queries", len(queries))
+        total_tested = len(query_results)
         
         # Calculate visibility score based on actual brand mentions
         visibility_score = (total_mentions / max(1, total_tested)) * 100 if total_tested > 0 else 0
         
-        # Calculate average position from platform results
-        avg_position = 3.2  # Default
-        if 'combined_query_results' in query_results:
-            positions = [q.get('avg_position', 5) for q in query_results['combined_query_results'] if q.get('overall_brand_mentioned', False)]
-            avg_position = sum(positions) / len(positions) if positions else 5.0
+        # Calculate average position from simulated results (only where brand is mentioned)
+        positions = [q.get('position') for q in query_results if q.get('brand_mentioned') and q.get('position') is not None]
+        avg_position = sum(positions) / len(positions) if positions else 5.0
         
         summary = {
-            "total_queries": query_results.get("total_queries_generated", len(queries)),
+            "total_queries": len(queries),
             "brand_mentions": total_mentions,
             "avg_position": avg_position,
             "visibility_score": visibility_score,
             "tested_queries": total_tested,
-            "success_rate": query_results.get("success_rate", 0)
+            "success_rate": (total_mentions / max(1, total_tested))
         }
         
         return {
             "total_queries_generated": len(queries),
-            "tested_queries": len(queries[:10]),
-            "success_rate": total_mentions / 10,
+            "tested_queries": total_tested,
+            "success_rate": (total_mentions / max(1, total_tested)),
             "brand_mentions": total_mentions,
             "all_queries": query_results,
-            "platform_breakdown": {"simulated": 10},
+            "platform_breakdown": {"simulated": total_tested},
             "summary_metrics": {
                 "total_mentions": total_mentions,
-                "total_tests": 20
+                "total_tests": total_tested,
+                "avg_position": avg_position,
+                "overall_score": visibility_score / 100.0,
+                "platforms_tested": ["simulated"]
             },
             "summary": summary
         }

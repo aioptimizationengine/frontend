@@ -383,11 +383,15 @@ async def analyze_brand(
         # Create summary for dashboard compatibility
         summary = {
             "total_queries": query_analysis.get("total_queries_generated", len(semantic_queries)),
-            "brand_mentions": query_analysis.get("brand_mentions", optimization_metrics.get('ai_citation_count', 0)),
+            "brand_mentions": summary.get("brand_mentions", 0),
             "avg_position": 3.2,  # Simulated average position
             "visibility_score": performance_summary.get('overall_score', 0) * 100,
+            "total_queries": summary.get("total_queries", 0),
             "tested_queries": query_analysis.get("tested_queries", 0),
-            "success_rate": query_analysis.get("success_rate", 0)
+            "success_rate": query_analysis.get("success_rate", 0.0),
+            "query_analysis": query_analysis,
+            "performance_summary": performance_summary,
+            "competitors": analysis_result.get("competitors_overview", [])
         }
         
         # Create SEO analysis structure
@@ -699,9 +703,16 @@ async def analyze_queries(
                 "query_results": query_analysis.get("all_queries", []),  # Combined results per unique query
                 "summary": {  # Required by frontend
                     "total_queries": query_analysis.get("total_queries_generated", 0),
+                    "brand_mentions": query_analysis.get("brand_mentions", 0),
+                    # Keep old key for compatibility with any existing UI wiring
                     "successful_mentions": query_analysis.get("brand_mentions", 0),
                     "avg_position": query_analysis.get("summary_metrics", {}).get("avg_position", 5.0),
-                    "overall_score": query_analysis.get("summary_metrics", {}).get("overall_score", 0.5)
+                    "overall_score": query_analysis.get("summary_metrics", {}).get("overall_score", 0.5),
+                    # Provide a visibility_score percentage when available
+                    "visibility_score": (
+                        (query_analysis.get("summary", {}) or {}).get("visibility_score")
+                        or query_analysis.get("summary_metrics", {}).get("overall_score", 0.5) * 100
+                    )
                 },
                 "platform_breakdown": query_analysis.get("platform_breakdown", {}),  # Platform-specific stats
                 "platforms_tested": query_analysis.get("summary_metrics", {}).get("platforms_tested", []),
