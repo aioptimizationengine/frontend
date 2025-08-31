@@ -1324,8 +1324,8 @@ class AIOptimizationEngine:
                     ]
                     queries.extend(category_queries)
             
-            # Remove duplicates and limit to 50 queries
-            unique_queries = list(dict.fromkeys(queries))[:50]
+            # Remove duplicates and expand to 60+ queries for comprehensive analysis
+            unique_queries = list(dict.fromkeys(queries))[:60]
             
             logger.info(f"Generated {len(unique_queries)} intelligent queries for {brand_name} based on {industry} industry research")
             return unique_queries
@@ -1979,11 +1979,13 @@ class AIOptimizationEngine:
         )
 
     def _create_simulated_query_results(self, brand_name: str, queries: List[str]) -> Dict[str, Any]:
-        """Produce simulated query analysis results compatible with both endpoints."""
+        """Produce simulated query analysis results for ALL queries, not just first 10."""
         results = []
         total_mentions = 0
         positions = []
-        for q in queries[:10]:
+        
+        # Process ALL queries, not just first 10
+        for q in queries:
             # Simulate a response text and detection
             sample_resp = f"{brand_name} is known for innovation. {q}"
             mentioned = self._detect_brand_mention(brand_name, sample_resp)
@@ -2005,7 +2007,8 @@ class AIOptimizationEngine:
             })
             if mentioned:
                 total_mentions += 1
-                positions.append(pos)
+                if pos is not None:
+                    positions.append(pos)
         avg_position = sum(positions) / len(positions) if positions else 5.0
         return {
             'total_queries_generated': len(queries),

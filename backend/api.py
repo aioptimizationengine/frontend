@@ -583,7 +583,8 @@ async def analyze_brand(
                     logger.info(f"Found existing brand: {brand.name} with ID: {brand.id}")
             
                 # Create analysis record with comprehensive data for dashboard
-                metrics_data = {
+                # Sanitize all data before database storage to prevent coroutine serialization errors
+                metrics_data = sanitize_for_json({
                     **optimization_metrics,
                     "queries": semantic_queries,
                     "product_categories": request.product_categories,
@@ -595,7 +596,7 @@ async def analyze_brand(
                     "query_analysis": query_analysis,
                     "performance_summary": performance_summary,
                     "competitors": competitors_overview
-                }
+                })
                 
                 # Log metrics data structure for debugging
                 logger.info(f"Saving analysis metrics with keys: {list(metrics_data.keys())}")
@@ -607,7 +608,7 @@ async def analyze_brand(
                     analysis_type="comprehensive",
                     data_source="real" if use_real_tracking_env.lower() in {"1", "true", "yes", "y", "on"} else "simulated",
                     metrics=metrics_data,
-                    recommendations=analysis_result.get("priority_recommendations", []),
+                    recommendations=sanitize_for_json(analysis_result.get("priority_recommendations", [])),
                     processing_time=processing_time,
                     started_at=datetime.fromtimestamp(analysis_start),
                     completed_at=datetime.now()
