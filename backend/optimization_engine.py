@@ -1480,7 +1480,7 @@ class AIOptimizationEngine:
     def _detect_brand_mention(self, brand_name: str, response_text: str) -> bool:
         """Improved brand mention detection"""
         if not response_text or not brand_name:
-{{ ... }}
+
             elif any(word in category_text for word in ['food', 'restaurant', 'dining', 'culinary']):
                 return 'food'
             elif any(word in category_text for word in ['real estate', 'property', 'homes', 'construction']):
