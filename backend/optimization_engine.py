@@ -23,12 +23,15 @@ logger = structlog.get_logger()
 
 @dataclass
 class OptimizationMetrics:
-    """Complete 12-metric system as specified in FRD Section 5.3"""
+    """Complete 12-metric system as specified in FRD Section 5.3
+    Extended with derived/helper fields that other parts of the engine reference.
+    """
+    # Core 12 metrics
     chunk_retrieval_frequency: float = 0.0           # 0-1 scale
     embedding_relevance_score: float = 0.0           # 0-1 scale  
     attribution_rate: float = 0.0                    # 0-1 scale
     ai_citation_count: int = 0                       # integer count
-    vector_index_presence_ratio: float = 0.0          # 0-1 scale
+    vector_index_presence_ratio: float = 0.0         # 0-1 scale
     retrieval_confidence_score: float = 0.0          # 0-1 scale
     rrf_rank_contribution: float = 0.0               # 0-1 scale
     llm_answer_coverage: float = 0.0                 # 0-1 scale
@@ -36,6 +39,18 @@ class OptimizationMetrics:
     semantic_density_score: float = 0.0              # 0-1 scale
     zero_click_surface_presence: float = 0.0         # 0-1 scale
     machine_validated_authority: float = 0.0         # 0-1 scale
+
+    # Extended/derived fields used by prompts and summaries
+    brand_strength_score: float = 0.0                # 0-1 scale
+    brand_visibility_potential: float = 0.0          # 0-1 scale
+    content_quality_score: float = 0.0               # 0-1 scale
+    industry_relevance: float = 0.0                  # 0-1 scale
+    amanda_crast_score: float = 0.0                  # 0-1 scale
+
+    # Summary fields
+    overall_score: float = 0.0
+    performance_grade: str = ""
+    performance_summary: dict = None
     
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -401,6 +416,8 @@ class AIOptimizationEngine:
         
         try:
             logger.info(f"Calculating metrics for {brand_name}")
+            # set current brand for helper methods that reference it indirectly
+            self.current_brand = brand_name
             
             # Create content chunks from sample or use default
             chunks = []
@@ -434,8 +451,22 @@ class AIOptimizationEngine:
             metrics.ai_model_crawl_success_rate = self._calculate_crawl_success_rate(brand_name)
             metrics.semantic_density_score = self._calculate_semantic_density(chunks)
             metrics.zero_click_surface_presence = self._calculate_zero_click_presence(chunks, queries)
-            metrics.machine_validated_authority = self._calculate_machine_authority(brand_name, chunks)
+            metrics.machine_validated_authority = await self._calculate_machine_authority(
+                metrics.attribution_rate,
+                metrics.semantic_density_score,
+                metrics.vector_index_presence_ratio,
+            )
             metrics.amanda_crast_score = self._calculate_amanda_crast_score(chunks)
+
+            # Derived fields used elsewhere
+            metrics.brand_strength_score = self._calculate_brand_strength_score(brand_name)
+            metrics.brand_visibility_potential = self._calculate_brand_visibility_potential(brand_name)
+            metrics.content_quality_score = self._calculate_content_quality_score(chunks)
+            metrics.industry_relevance = self._calculate_industry_relevance(brand_name, [])
+
+            # Summary fields
+            metrics.overall_score = metrics.get_overall_score()
+            metrics.performance_grade = self._get_consistent_grade(brand_name, metrics.overall_score)
             metrics.performance_summary = self._calculate_performance_summary(metrics)
             
             # Validate all metrics are within expected ranges
@@ -471,8 +502,63 @@ class AIOptimizationEngine:
             metrics.semantic_density_score = brand_complexity * 0.9
             metrics.zero_click_surface_presence = self._calculate_brand_visibility_potential(brand_name)
             metrics.machine_validated_authority = (brand_length_factor + brand_complexity) / 2 * 0.8
+            # Derived fields even in fallback
+            metrics.brand_strength_score = self._calculate_brand_strength_score(brand_name)
+            metrics.brand_visibility_potential = self._calculate_brand_visibility_potential(brand_name)
+            metrics.content_quality_score = max(0.0, min(1.0, 0.4 + 0.3 * brand_complexity))
+            metrics.industry_relevance = max(0.0, min(1.0, 0.5 + 0.2 * brand_length_factor))
+            metrics.overall_score = metrics.get_overall_score()
+            metrics.performance_grade = self._get_consistent_grade(brand_name, metrics.overall_score)
             
             return metrics
+
+    def _calculate_content_quality_score(self, chunks: List[ContentChunk]) -> float:
+        """Aggregate quality from chunk features; 0-1 scale."""
+        if not chunks:
+            return 0.0
+        try:
+            total = 0.0
+            for c in chunks:
+                s = 0.0
+                wc = getattr(c, 'word_count', 0)
+                if wc >= 50:
+                    s += 0.3
+                elif wc >= 25:
+                    s += 0.15
+                if getattr(c, 'has_structure', False):
+                    s += 0.25
+                kw = getattr(c, 'keywords', []) or []
+                if len(kw) >= 4:
+                    s += 0.25
+                elif len(kw) >= 2:
+                    s += 0.15
+                s += min(0.2, max(0.0, getattr(c, 'confidence_score', 0.0)) * 0.2)
+                total += min(1.0, s)
+            return round(min(1.0, total / len(chunks)), 4)
+        except Exception as e:
+            logger.error(f"Content quality calc failed: {e}")
+            return 0.5
+
+    def _calculate_industry_relevance(self, brand_name: str, product_categories: List[str]) -> float:
+        """Score how well content aligns with inferred industry context."""
+        try:
+            industry = self._determine_industry_context(brand_name, product_categories or [])
+            # Simple heuristic based on brand strength and industry multiplier
+            multipliers = {
+                'technology': 0.8,
+                'healthcare': 0.7,
+                'finance': 0.7,
+                'real estate': 0.65,
+                'automotive': 0.75,
+                'energy': 0.7,
+                'general business': 0.6,
+            }
+            m = multipliers.get(industry, 0.6)
+            strength = self._calculate_brand_strength_score(brand_name)
+            return round(max(0.0, min(1.0, 0.4 + 0.4 * m + 0.2 * strength)), 4)
+        except Exception as e:
+            logger.error(f"Industry relevance calc failed: {e}")
+            return 0.5
 
     async def _calculate_optimization_metrics(self, brand_name: str, content_chunks: List[ContentChunk], 
                                             queries: List[str], llm_results: Dict[str, Any]) -> OptimizationMetrics:
