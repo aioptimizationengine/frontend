@@ -1415,24 +1415,22 @@ class AIOptimizationEngine:
             except Exception as e:
                 logger.info(f"OpenAI query gen failed: {e}")
 
-        # Light filtering
+        # Light filtering and bounds for LLM-generated queries
         results = [q for q in results if brand_name.lower() in q.lower() or len(q.split()) >= 2]
-        # Keep reasonable bounds
         return results[:40]
 
     def _generate_industry_specific_queries(self, brand_name: str, industry: str, brand_type: str) -> List[str]:
-        """Generate industry-specific base queries"""
-        queries = []
-        
-{{ ... }}
+        """Generate industry-specific base queries (helper for context/insights)."""
+        queries: List[str] = []
+
         # Universal base queries
         base = [
             f"What is {brand_name}?",
             f"Tell me about {brand_name}",
-            f"{brand_name} overview"
+            f"{brand_name} overview",
         ]
         queries.extend(base)
-        
+
         if industry == 'technology':
             tech_queries = [
                 f"{brand_name} technical specifications",
@@ -1440,10 +1438,10 @@ class AIOptimizationEngine:
                 f"{brand_name} security features",
                 f"{brand_name} scalability",
                 f"{brand_name} API documentation",
-                f"{brand_name} system requirements"
+                f"{brand_name} system requirements",
             ]
             queries.extend(tech_queries)
-            
+
         elif industry == 'healthcare':
             health_queries = [
                 f"{brand_name} clinical evidence",
@@ -1451,10 +1449,10 @@ class AIOptimizationEngine:
                 f"{brand_name} FDA approval",
                 f"{brand_name} patient outcomes",
                 f"{brand_name} side effects",
-                f"{brand_name} contraindications"
+                f"{brand_name} contraindications",
             ]
             queries.extend(health_queries)
-            
+
         elif industry == 'finance':
             finance_queries = [
                 f"{brand_name} fees and pricing",
@@ -1462,10 +1460,10 @@ class AIOptimizationEngine:
                 f"{brand_name} regulatory compliance",
                 f"{brand_name} risk assessment",
                 f"{brand_name} security measures",
-                f"{brand_name} account types"
+                f"{brand_name} account types",
             ]
             queries.extend(finance_queries)
-            
+
         else:
             general_queries = [
                 f"{brand_name} pricing",
@@ -1473,26 +1471,11 @@ class AIOptimizationEngine:
                 f"{brand_name} quality",
                 f"{brand_name} features",
                 f"{brand_name} benefits",
-                f"{brand_name} support"
+                f"{brand_name} support",
             ]
             queries.extend(general_queries)
-        
-        return queries
 
-    def _generate_fallback_queries(self, brand_name: str) -> List[str]:
-        """Generate basic fallback queries when intelligent generation fails"""
-        return [
-            f"What is {brand_name}?",
-            f"Tell me about {brand_name}",
-            f"How good is {brand_name}?",
-            f"{brand_name} reviews",
-            f"{brand_name} pricing",
-            f"Is {brand_name} reliable?",
-            f"{brand_name} vs competitors",
-            f"Should I choose {brand_name}?",
-            f"{brand_name} pros and cons",
-            f"{brand_name} customer experience"
-        ]
+        return queries
 
     async def _test_queries_across_platforms(self, brand_name: str, queries: List[str]) -> Dict[str, Any]:
         """Test queries across multiple AI platforms and combine results under each unique query"""
