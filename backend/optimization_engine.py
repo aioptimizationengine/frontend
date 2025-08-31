@@ -1664,6 +1664,119 @@ class AIOptimizationEngine:
 
     # ==================== BRAND ANALYSIS METHODS ====================
 
+    async def _generate_brand_specific_recommendations(self, 
+                                                    metrics: OptimizationMetrics, 
+                                                    brand_name: str, 
+                                                    product_categories: List[str] = None) -> Dict[str, Any]:
+        """
+        Generate AI-powered brand-specific recommendations using GPT.
+        
+        Args:
+            metrics: OptimizationMetrics object containing brand metrics
+            brand_name: Name of the brand
+            product_categories: List of product categories associated with the brand
+            
+        Returns:
+            Dictionary containing AI-generated recommendations
+        """
+        if not product_categories:
+            product_categories = ["general"]
+            
+        # Prepare metrics summary for the prompt
+        metrics_summary = (
+            f"Brand: {brand_name}\n"
+            f"Brand Strength Score: {metrics.brand_strength_score:.2f}/1.0\n"
+            f"Visibility Potential: {metrics.brand_visibility_potential:.2f}/1.0\n"
+            f"Attribution Rate: {metrics.attribution_rate:.2f}/1.0\n"
+            f"Content Quality: {metrics.content_quality_score:.2f}/1.0\n"
+            f"Industry Relevance: {metrics.industry_relevance:.2f}/1.0\n"
+            f"AI Citation Count: {metrics.ai_citation_count}"
+        )
+        
+        # Prepare the prompt for GPT
+        prompt = f"""You are a brand optimization expert. Analyze the following brand metrics and provide specific, actionable recommendations.
+        
+        Brand Information:
+        - Brand Name: {brand_name}
+        - Product Categories: {', '.join(product_categories)}
+        
+        Current Metrics (0-1 scale, higher is better):
+        {metrics_summary}
+        
+        Please provide:
+        1. A brief 2-3 sentence summary of the brand's current standing
+        2. 3-5 specific, actionable recommendations to improve brand visibility and performance
+        3. Industry-specific suggestions based on the product categories
+        4. Content optimization strategies
+        
+        Format your response as a JSON object with these keys:
+        - summary: Brief overview
+        - recommendations: List of specific actions
+        - industry_suggestions: List of industry-specific tips
+        - content_strategies: List of content improvement ideas
+        """
+        
+        try:
+            # Try to get recommendations from GPT if API key is available
+            if hasattr(self, 'openai_client'):
+                response = await self.openai_client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that provides brand optimization recommendations in JSON format."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"}
+                )
+                
+                # Parse and return the response
+                recommendations = json.loads(response.choices[0].message.content)
+                return {
+                    "summary": recommendations.get("summary", ""),
+                    "recommendations": {
+                        "brand_visibility": recommendations.get("recommendations", []),
+                        "industry_specific": recommendations.get("industry_suggestions", []),
+                        "content_improvement": recommendations.get("content_strategies", [])
+                    },
+                    "priority": self._determine_priority(metrics)
+                }
+                
+        except Exception as e:
+            logger.warning(f"Failed to generate AI recommendations: {str(e)}")
+            
+        # Fallback to basic recommendations if AI generation fails
+        return self._get_basic_recommendations(metrics, brand_name, product_categories)
+        
+    def _determine_priority(self, metrics: OptimizationMetrics) -> str:
+        """Determine priority level based on metrics."""
+        if metrics.brand_visibility_potential < 0.4 or metrics.attribution_rate < 0.3:
+            return "high"
+        elif metrics.content_quality_score < 0.6 or metrics.industry_relevance < 0.5:
+            return "medium"
+        return "low"
+        
+    def _get_basic_recommendations(self, metrics: OptimizationMetrics, 
+                                 brand_name: str, 
+                                 product_categories: List[str]) -> Dict[str, Any]:
+        """Generate basic recommendations when AI is not available."""
+        return {
+            "summary": f"{brand_name} shows potential for optimization in several areas.",
+            "recommendations": {
+                "brand_visibility": [
+                    f"Improve brand recognition for {brand_name}",
+                    "Enhance visual identity and brand consistency"
+                ],
+                "industry_specific": [
+                    f"Research {cat} industry benchmarks" for cat in product_categories
+                ],
+                "content_improvement": [
+                    "Improve content quality and relevance",
+                    "Enhance content structure and readability"
+                ]
+            },
+            "priority": self._determine_priority(metrics)
+        }
+
+
     def _calculate_brand_strength_score(self, brand_name: str) -> float:
         """Score 0-1 based on length, uniqueness, and consonant ratio, with hash-based consistency."""
         try:
