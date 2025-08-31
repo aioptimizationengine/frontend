@@ -1478,22 +1478,55 @@ class AIOptimizationEngine:
             return 5.0
 
     def _detect_brand_mention(self, brand_name: str, response_text: str) -> bool:
-        """Improved brand mention detection"""
-        if not response_text or not brand_name:
+        """Detect if the brand is mentioned in the given response text.
 
-            elif any(word in category_text for word in ['food', 'restaurant', 'dining', 'culinary']):
-                return 'food'
-            elif any(word in category_text for word in ['real estate', 'property', 'homes', 'construction']):
-                return 'real estate'
-        
-        # Set current brand for error recovery methods
-        self.current_brand = brand_name
-        
-        # Store brand context for visibility calculations
-        if hasattr(self, '_brand_contexts'):
-            self._brand_contexts[brand_name] = {'strength': self._calculate_brand_strength_score(brand_name)}
-        else:
-            self._brand_contexts = {brand_name: {'strength': self._calculate_brand_strength_score(brand_name)}}
+        Supports multi-word brand names, hyphen/space variants, possessives, and common abbreviations.
+        Returns True if a likely mention is found, otherwise False.
+        """
+        try:
+            if not response_text or not brand_name:
+                return False
+
+            text = response_text.lower()
+            brand = brand_name.lower().strip()
+
+            # Build variants
+            brand_words = re.split(r"\s+", brand)
+            variants = set()
+            variants.add(brand)
+            variants.add(brand.replace('-', ' '))
+            variants.add(brand.replace(' ', '-'))
+            variants.add(brand.replace(' ', ''))  # collapsed
+
+            # If multi-word, also check initials (e.g., 'ibm' for 'International Business Machines')
+            if len(brand_words) > 1:
+                initials = ''.join(w[0] for w in brand_words if w)
+                if len(initials) >= 2:
+                    variants.add(initials)
+
+            # Regex patterns with word boundaries and optional possessive
+            patterns = []
+            for v in variants:
+                escaped = re.escape(v)
+                patterns.append(rf"\b{escaped}(?:'s)?\b")
+
+            # Also allow flexible separators for multi-word brands (spaces or hyphens)
+            if len(brand_words) > 1:
+                joiner = r"[\s\-]+"
+                flexible = joiner.join(re.escape(w) for w in brand_words)
+                patterns.append(rf"\b{flexible}(?:'s)?\b")
+
+            # URL variant (e.g., brand.com)
+            domain = re.escape(brand.replace(' ', ''))
+            patterns.append(rf"\b{domain}\.com\b")
+
+            for pattern in patterns:
+                if re.search(pattern, text):
+                    return True
+            return False
+        except Exception as e:
+            logger.debug(f"Brand mention detection failed for '{brand_name}': {e}")
+            return False
 
     # ==================== RECOMMENDATION METHODS ====================
 
