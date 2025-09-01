@@ -12,7 +12,7 @@ import hashlib
 import time
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 import numpy as np
 from sentence_transformers import SentenceTransformer, util
 import anthropic
