@@ -1087,10 +1087,10 @@ export default function BrandAnalysis() {
                                 {analysisData.data.seo_analysis?.roadmap?.map((phase: any, index: number) => (
                                   <div key={index} className="border rounded-lg overflow-hidden">
                                     <div className="bg-blue-50 px-4 py-3 border-b">
-                                      <h4 className="font-medium text-blue-800">{phase.phase}</h4>
+                                      <h4 className="font-medium text-blue-800">{phase.name || phase.phase || 'Roadmap Phase'}</h4>
                                     </div>
                                     <ul className="divide-y divide-gray-200">
-                                      {phase.items.map((item: string, itemIndex: number) => (
+                                      {(phase.key_actions || phase.items || []).map((item: string, itemIndex: number) => (
                                         <li key={itemIndex} className="px-4 py-3 text-sm">
                                           <div className="flex items-start">
                                             <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
