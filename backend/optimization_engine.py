@@ -23,12 +23,15 @@ logger = structlog.get_logger()
 
 @dataclass
 class OptimizationMetrics:
-    """Complete 12-metric system as specified in FRD Section 5.3"""
+    """Complete 12-metric system as specified in FRD Section 5.3
+    Extended with derived/helper fields that other parts of the engine reference.
+    """
+    # Core 12 metrics
     chunk_retrieval_frequency: float = 0.0           # 0-1 scale
     embedding_relevance_score: float = 0.0           # 0-1 scale  
     attribution_rate: float = 0.0                    # 0-1 scale
     ai_citation_count: int = 0                       # integer count
-    vector_index_presence_ratio: float = 0.0          # 0-1 scale
+    vector_index_presence_ratio: float = 0.0         # 0-1 scale
     retrieval_confidence_score: float = 0.0          # 0-1 scale
     rrf_rank_contribution: float = 0.0               # 0-1 scale
     llm_answer_coverage: float = 0.0                 # 0-1 scale
@@ -36,6 +39,18 @@ class OptimizationMetrics:
     semantic_density_score: float = 0.0              # 0-1 scale
     zero_click_surface_presence: float = 0.0         # 0-1 scale
     machine_validated_authority: float = 0.0         # 0-1 scale
+
+    # Extended/derived fields used by prompts and summaries
+    brand_strength_score: float = 0.0                # 0-1 scale
+    brand_visibility_potential: float = 0.0          # 0-1 scale
+    content_quality_score: float = 0.0               # 0-1 scale
+    industry_relevance: float = 0.0                  # 0-1 scale
+    amanda_crast_score: float = 0.0                  # 0-1 scale
+
+    # Summary fields
+    overall_score: float = 0.0
+    performance_grade: str = ""
+    performance_summary: dict = None
     
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -270,7 +285,7 @@ class AIOptimizationEngine:
                 query_analysis_results = self._create_simulated_query_results(brand_name, queries)
             
             # 3. FULL ANALYSIS - Generate recommendations and insights
-            recommendations = self._generate_brand_specific_recommendations(metrics, brand_name, product_categories)
+            recommendations = await self._generate_brand_specific_recommendations(metrics, brand_name, product_categories)
             
             # Create performance summary with consistent grading
             performance_summary = {
@@ -418,6 +433,8 @@ class AIOptimizationEngine:
         
         try:
             logger.info(f"Calculating metrics for {brand_name}")
+            # set current brand for helper methods that reference it indirectly
+            self.current_brand = brand_name
             
             # Create content chunks from sample or use default
             chunks = []
@@ -451,8 +468,22 @@ class AIOptimizationEngine:
             metrics.ai_model_crawl_success_rate = self._calculate_crawl_success_rate(brand_name)
             metrics.semantic_density_score = self._calculate_semantic_density(chunks)
             metrics.zero_click_surface_presence = self._calculate_zero_click_presence(chunks, queries)
-            metrics.machine_validated_authority = self._calculate_machine_authority(brand_name, chunks)
+            metrics.machine_validated_authority = await self._calculate_machine_authority(
+                metrics.attribution_rate,
+                metrics.semantic_density_score,
+                metrics.vector_index_presence_ratio,
+            )
             metrics.amanda_crast_score = self._calculate_amanda_crast_score(chunks)
+
+            # Derived fields used elsewhere
+            metrics.brand_strength_score = self._calculate_brand_strength_score(brand_name)
+            metrics.brand_visibility_potential = self._calculate_brand_visibility_potential(brand_name)
+            metrics.content_quality_score = self._calculate_content_quality_score(chunks)
+            metrics.industry_relevance = self._calculate_industry_relevance(brand_name, [])
+
+            # Summary fields
+            metrics.overall_score = metrics.get_overall_score()
+            metrics.performance_grade = self._get_consistent_grade(brand_name, metrics.overall_score)
             metrics.performance_summary = self._calculate_performance_summary(metrics)
             
             # Validate all metrics are within expected ranges
@@ -488,8 +519,63 @@ class AIOptimizationEngine:
             metrics.semantic_density_score = brand_complexity * 0.9
             metrics.zero_click_surface_presence = self._calculate_brand_visibility_potential(brand_name)
             metrics.machine_validated_authority = (brand_length_factor + brand_complexity) / 2 * 0.8
+            # Derived fields even in fallback
+            metrics.brand_strength_score = self._calculate_brand_strength_score(brand_name)
+            metrics.brand_visibility_potential = self._calculate_brand_visibility_potential(brand_name)
+            metrics.content_quality_score = max(0.0, min(1.0, 0.4 + 0.3 * brand_complexity))
+            metrics.industry_relevance = max(0.0, min(1.0, 0.5 + 0.2 * brand_length_factor))
+            metrics.overall_score = metrics.get_overall_score()
+            metrics.performance_grade = self._get_consistent_grade(brand_name, metrics.overall_score)
             
             return metrics
+
+    def _calculate_content_quality_score(self, chunks: List[ContentChunk]) -> float:
+        """Aggregate quality from chunk features; 0-1 scale."""
+        if not chunks:
+            return 0.0
+        try:
+            total = 0.0
+            for c in chunks:
+                s = 0.0
+                wc = getattr(c, 'word_count', 0)
+                if wc >= 50:
+                    s += 0.3
+                elif wc >= 25:
+                    s += 0.15
+                if getattr(c, 'has_structure', False):
+                    s += 0.25
+                kw = getattr(c, 'keywords', []) or []
+                if len(kw) >= 4:
+                    s += 0.25
+                elif len(kw) >= 2:
+                    s += 0.15
+                s += min(0.2, max(0.0, getattr(c, 'confidence_score', 0.0)) * 0.2)
+                total += min(1.0, s)
+            return round(min(1.0, total / len(chunks)), 4)
+        except Exception as e:
+            logger.error(f"Content quality calc failed: {e}")
+            return 0.5
+
+    def _calculate_industry_relevance(self, brand_name: str, product_categories: List[str]) -> float:
+        """Score how well content aligns with inferred industry context."""
+        try:
+            industry = self._determine_industry_context(brand_name, product_categories or [])
+            # Simple heuristic based on brand strength and industry multiplier
+            multipliers = {
+                'technology': 0.8,
+                'healthcare': 0.7,
+                'finance': 0.7,
+                'real estate': 0.65,
+                'automotive': 0.75,
+                'energy': 0.7,
+                'general business': 0.6,
+            }
+            m = multipliers.get(industry, 0.6)
+            strength = self._calculate_brand_strength_score(brand_name)
+            return round(max(0.0, min(1.0, 0.4 + 0.4 * m + 0.2 * strength)), 4)
+        except Exception as e:
+            logger.error(f"Industry relevance calc failed: {e}")
+            return 0.5
 
     async def _calculate_optimization_metrics(self, brand_name: str, content_chunks: List[ContentChunk], 
                                             queries: List[str], llm_results: Dict[str, Any]) -> OptimizationMetrics:
@@ -1269,101 +1355,321 @@ class AIOptimizationEngine:
         return contexts.get(industry, 'competitive market environment')
 
     async def _generate_semantic_queries(self, brand_name: str, product_categories: List[str]) -> List[str]:
-        """Generate intelligent semantic queries based on brand research and context"""
-        try:
-            # Step 1: Research brand context first
-            brand_context = await self._research_brand_context(brand_name, product_categories)
-            
-            queries = []
-            industry = brand_context['industry']
-            brand_type = brand_context['brand_type']
-            insights = brand_context['insights']
-            
-            logger.info(f"Generating queries for {brand_name} ({industry} industry, {brand_type} type)")
-            
-            # Step 2: Generate industry-aware base queries
-            base_queries = self._generate_industry_specific_queries(brand_name, industry, brand_type)
-            queries.extend(base_queries)
-            
-            # Step 3: Generate audience-specific queries
-            for audience in insights['target_audience']:
-                audience_queries = [
-                    f"Is {brand_name} good for {audience}?",
-                    f"{brand_name} benefits for {audience}",
-                    f"How {audience} use {brand_name}"
-                ]
-                queries.extend(audience_queries)
-            
-            # Step 4: Generate differentiator-based queries
-            for differentiator in insights['key_differentiators']:
-                diff_queries = [
-                    f"{brand_name} {differentiator}",
-                    f"How {brand_name} ensures {differentiator}"
-                ]
-                queries.extend(diff_queries)
-            
-            # Step 5: Generate use case queries
-            for use_case in insights['common_use_cases']:
-                use_case_queries = [
-                    f"{brand_name} for {use_case}",
-                    f"Best {use_case} solution {brand_name}"
-                ]
-                queries.extend(use_case_queries)
-            
-            # Step 6: Generate competitive and comparison queries
-            competitive_queries = [
-                f"{brand_name} vs competitors",
-                f"Why choose {brand_name} over alternatives",
-                f"{brand_name} market position",
-                f"Is {brand_name} the best choice",
-                f"{brand_name} compared to industry leaders"
-            ]
-            queries.extend(competitive_queries)
-            
-            # Step 7: Generate decision-making queries
-            decision_queries = [
-                f"Should I choose {brand_name}?",
-                f"{brand_name} pros and cons",
-                f"Is {brand_name} worth it?",
-                f"{brand_name} customer reviews",
-                f"Problems with {brand_name}",
-                f"{brand_name} reliability"
-            ]
-            queries.extend(decision_queries)
-            
-            # Step 8: Add category-specific queries if provided
-            if product_categories:
-                for category in product_categories[:2]:  # Limit to 2 categories
-                    category_queries = [
-                        f"Best {category} from {brand_name}",
-                        f"{brand_name} {category} review",
-                        f"{brand_name} {category} features"
-                    ]
-                    queries.extend(category_queries)
-            
-            # Remove duplicates and limit to 50 queries
-            unique_queries = list(dict.fromkeys(queries))[:50]
-            
-            logger.info(f"Generated {len(unique_queries)} intelligent queries for {brand_name} based on {industry} industry research")
+        """Generate semantic queries.
+
+        Behavior:
+        - If config llm_only_queries=True, strictly use LLM and raise on failure/empty.
+        - Otherwise, attempt LLM first; if unavailable or empty, fall back to heuristic generation
+          using industry, brand type, and product categories (previous working behavior).
+        """
+        # Determine mode from config (default: allow fallback)
+        llm_only = bool(self.config.get('llm_only_queries', False))
+
+        # Research brand context to enrich prompts and heuristics
+        brand_context = await self._research_brand_context(brand_name, product_categories)
+        industry = (brand_context.get('industry') or 'general business').lower()
+        brand_type = brand_context.get('brand_type', 'general')
+
+        logger.info(
+            "generating_queries",
+            brand=brand_name,
+            industry=industry,
+            brand_type=brand_type,
+            llm_only=llm_only,
+        )
+
+        # If strictly LLM-only, enforce clients and non-empty results
+        if llm_only:
+            if not (self.anthropic_client or self.openai_client):
+                raise RuntimeError("LLM query generation requires configured Anthropic or OpenAI client")
+            llm_queries = await self._llm_generate_queries(brand_name, product_categories, brand_context)
+            if not llm_queries:
+                raise RuntimeError("LLM query generation returned no queries")
+            unique_queries = list(dict.fromkeys([q.strip() for q in llm_queries if isinstance(q, str) and q.strip()]))[:60]
+            logger.info(f"Generated {len(unique_queries)} LLM queries (strict) for {brand_name}")
             return unique_queries
-            
+
+        # Best-effort: try LLM first, then heuristic fallback
+        queries: List[str] = []
+        try:
+            if (self.anthropic_client or self.openai_client):
+                llm_queries = await self._llm_generate_queries(brand_name, product_categories, brand_context)
+                if llm_queries:
+                    queries.extend(llm_queries)
         except Exception as e:
-            logger.error(f"Intelligent query generation failed: {e}")
-            # Fallback to basic queries
-            return self._generate_fallback_queries(brand_name)
+            logger.warning(f"LLM query generation failed, falling back to heuristics: {e}")
+
+        # Heuristic fallback if needed (revert-style behavior)
+        if not queries:
+            base: List[str] = []
+            # Industry-specific seeds
+            try:
+                base.extend(self._generate_industry_specific_queries(brand_name, industry, brand_type))
+            except Exception:
+                pass
+
+            # Generic brand queries
+            generic = [
+                f"What is {brand_name}?",
+                f"Tell me about {brand_name}",
+                f"{brand_name} pricing",
+                f"{brand_name} reviews",
+                f"{brand_name} features",
+                f"{brand_name} benefits",
+                f"{brand_name} vs competitors",
+                f"Best alternatives to {brand_name}",
+                f"Is {brand_name} good?",
+                f"How does {brand_name} work?",
+            ]
+            base.extend(generic)
+
+            # Category-expanded queries
+            cats = [c for c in (product_categories or []) if isinstance(c, str) and c.strip()]
+            for cat in cats:
+                c = cat.strip()
+                base.extend([
+                    f"{brand_name} {c}",
+                    f"{brand_name} {c} pricing",
+                    f"{brand_name} {c} reviews",
+                    f"{brand_name} {c} vs alternatives",
+                    f"Is {brand_name} good for {c}?",
+                    f"{brand_name} {c} integration",
+                ])
+
+            # Intent variants
+            intents = ["setup", "tutorial", "docs", "comparison", "support", "limitations", "security", "API", "case studies"]
+            for intent in intents:
+                base.append(f"{brand_name} {intent}")
+
+            queries = base
+
+        # Deduplicate and cap at 60
+        unique_queries = list(dict.fromkeys([q.strip() for q in queries if isinstance(q, str) and q.strip()]))[:60]
+        logger.info(f"Generated {len(unique_queries)} queries for {brand_name} (mode={'llm_only' if llm_only else 'hybrid'})")
+        return unique_queries
+
+    async def _llm_generate_queries(self, brand_name: str, product_categories: List[str], brand_context: Dict[str, Any]) -> List[str]:
+        """Use Anthropic/OpenAI to propose semantic queries for the brand. LLM-only; no heuristic fallback."""
+        use_cases = self._identify_use_cases(brand_name, brand_context.get('industry', 'general business'))
+        prompt = (
+            "You generate search-style queries to evaluate a brand's presence in AI answers.\n"
+            "Output rules:\n"
+            "- Return 25-40 queries.\n"
+            "- One query per line.\n"
+            "- No numbering or bullets.\n"
+            "- Keep queries short and realistic.\n"
+            "- Prefer queries that explicitly include the brand name.\n"
+            "Context:\n"
+            f"Brand: {brand_name}\n"
+            f"Industry: {brand_context.get('industry', 'unknown')}\n"
+            f"Brand type: {brand_context.get('brand_type', 'general')}\n"
+            f"Use cases: {', '.join(use_cases)}\n"
+            f"Product categories: {', '.join(product_categories or [])}\n"
+            "Cover intents like: what, how, pricing, comparison, integration, benefits, reviews, alternatives.\n"
+            "Example format (do not prefix numbers):\n"
+            f"{brand_name} pricing\n{brand_name} vs competitors\nIs {brand_name} good for businesses?\n{brand_name} integration with Shopify\n"
+        )
+
+        results: List[str] = []
+
+        # Helper: parse text into list of queries
+        def _parse_queries_text(text: str) -> List[str]:
+            if not text:
+                return []
+            # Try JSON array first
+            try:
+                import json
+                data = json.loads(text)
+                if isinstance(data, list):
+                    return [str(x).strip() for x in data if str(x).strip()]
+            except Exception:
+                pass
+            # If inside code fences, extract inner
+            try:
+                import re
+                m = re.search(r"```(?:json|txt|text)?\n([\s\S]*?)```", text)
+                if m:
+                    inner = m.group(1)
+                    lines = [l.strip().lstrip("-•*\t ") for l in inner.splitlines()]
+                    return [l for l in lines if l]
+            except Exception:
+                pass
+            # Fallback to splitting lines
+            lines = [l.strip().lstrip("-•*\t ") for l in text.splitlines()]
+            return [l for l in lines if l]
+
+        # Try Anthropic first with robust parsing
+        try:
+            if self.anthropic_client:
+                msg = await self.anthropic_client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=600,
+                    temperature=0.4,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                text = ""
+                content = getattr(msg, 'content', None)
+                if content:
+                    try:
+                        # content can be list of blocks; each block may be an object with .text or a dict
+                        parts = []
+                        for block in content:
+                            if isinstance(block, dict):
+                                parts.append(block.get('text', '') or '')
+                            else:
+                                blk_text = getattr(block, 'text', '')
+                                parts.append(blk_text or '')
+                        text = "".join(parts)
+                    except Exception:
+                        pass
+                if not text:
+                    text = getattr(msg, 'text', '') or ''
+                results = _parse_queries_text(text)
+        except Exception as e:
+            logger.info(f"Anthropic query gen failed: {e}")
+
+        # If none, try OpenAI with robust parsing
+        if not results:
+            try:
+                if self.openai_client:
+                    completion = await self.openai_client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        temperature=0.4,
+                        messages=[
+                            {"role": "system", "content": "Return only queries, one per line, no numbering or bullets."},
+                            {"role": "user", "content": prompt},
+                        ],
+                    )
+                    text = ""
+                    if completion and getattr(completion, 'choices', None):
+                        try:
+                            text = completion.choices[0].message.content or ""
+                        except Exception:
+                            text = ""
+                    results = _parse_queries_text(text)
+            except Exception as e:
+                logger.info(f"OpenAI query gen failed: {e}")
+
+        # Retry once with a stricter instruction if empty, still LLM-only
+        if not results:
+            retry_prompt = prompt + "\nImportant: Ensure each query explicitly contains the brand name."
+            try:
+                if self.anthropic_client:
+                    msg = await self.anthropic_client.messages.create(
+                        model="claude-3-haiku-20240307",
+                        max_tokens=600,
+                        temperature=0.2,
+                        messages=[{"role": "user", "content": retry_prompt}],
+                    )
+                    text = ""
+                    content = getattr(msg, 'content', None)
+                    if content:
+                        try:
+                            parts = []
+                            for block in content:
+                                if isinstance(block, dict):
+                                    parts.append(block.get('text', '') or '')
+                                else:
+                                    parts.append(getattr(block, 'text', '') or '')
+                            text = "".join(parts)
+                        except Exception:
+                            pass
+                    if not text:
+                        text = getattr(msg, 'text', '') or ''
+                    results = _parse_queries_text(text)
+            except Exception:
+                pass
+        if not results and self.openai_client:
+            try:
+                completion = await self.openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    temperature=0.2,
+                    messages=[
+                        {"role": "system", "content": "Return only queries, one per line, no numbering or bullets."},
+                        {"role": "user", "content": retry_prompt},
+                    ],
+                )
+                text = ""
+                if completion and getattr(completion, 'choices', None):
+                    try:
+                        text = completion.choices[0].message.content or ""
+                    except Exception:
+                        text = ""
+                results = _parse_queries_text(text)
+            except Exception:
+                pass
+
+        # Last-chance retry: change model/format and force JSON array
+        if not results:
+            try:
+                if self.anthropic_client:
+                    json_prompt = prompt + "\nReturn ONLY a JSON array of strings, no prose."
+                    msg = await self.anthropic_client.messages.create(
+                        model="claude-3-haiku-20240307",
+                        max_tokens=700,
+                        temperature=0.3,
+                        messages=[{"role": "user", "content": json_prompt}],
+                    )
+                    text = getattr(msg, 'text', '') or ''
+                    if not text:
+                        content = getattr(msg, 'content', None)
+                        if content:
+                            try:
+                                parts = []
+                                for block in content:
+                                    if isinstance(block, dict):
+                                        parts.append(block.get('text', '') or '')
+                                    else:
+                                        parts.append(getattr(block, 'text', '') or '')
+                                text = "".join(parts)
+                            except Exception:
+                                pass
+                    results = _parse_queries_text(text)
+            except Exception:
+                pass
+        if not results and self.openai_client:
+            try:
+                json_prompt = prompt + "\nReturn ONLY a JSON array of strings, no prose."
+                completion = await self.openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    temperature=0.3,
+                    messages=[
+                        {"role": "system", "content": "Return only a JSON array of strings."},
+                        {"role": "user", "content": json_prompt},
+                    ],
+                )
+                text = ""
+                if completion and getattr(completion, 'choices', None):
+                    try:
+                        text = completion.choices[0].message.content or ""
+                    except Exception:
+                        text = ""
+                results = _parse_queries_text(text)
+            except Exception:
+                pass
+
+        # Basic cleanup and bounds (LLM-only)
+        cleaned = []
+        for q in results:
+            # Remove any leading numbering like "1. ", "- ", etc.
+            q = q.strip()
+            q = q.lstrip("-•*\t ")
+            if q and q not in cleaned:
+                cleaned.append(q)
+        return cleaned[:40]
 
     def _generate_industry_specific_queries(self, brand_name: str, industry: str, brand_type: str) -> List[str]:
-        """Generate industry-specific base queries"""
-        queries = []
-        
+        """Generate industry-specific base queries (helper for context/insights)."""
+        queries: List[str] = []
+
         # Universal base queries
         base = [
             f"What is {brand_name}?",
             f"Tell me about {brand_name}",
-            f"{brand_name} overview"
+            f"{brand_name} overview",
         ]
         queries.extend(base)
-        
+
         if industry == 'technology':
             tech_queries = [
                 f"{brand_name} technical specifications",
@@ -1371,10 +1677,10 @@ class AIOptimizationEngine:
                 f"{brand_name} security features",
                 f"{brand_name} scalability",
                 f"{brand_name} API documentation",
-                f"{brand_name} system requirements"
+                f"{brand_name} system requirements",
             ]
             queries.extend(tech_queries)
-            
+
         elif industry == 'healthcare':
             health_queries = [
                 f"{brand_name} clinical evidence",
@@ -1382,10 +1688,10 @@ class AIOptimizationEngine:
                 f"{brand_name} FDA approval",
                 f"{brand_name} patient outcomes",
                 f"{brand_name} side effects",
-                f"{brand_name} contraindications"
+                f"{brand_name} contraindications",
             ]
             queries.extend(health_queries)
-            
+
         elif industry == 'finance':
             finance_queries = [
                 f"{brand_name} fees and pricing",
@@ -1393,10 +1699,10 @@ class AIOptimizationEngine:
                 f"{brand_name} regulatory compliance",
                 f"{brand_name} risk assessment",
                 f"{brand_name} security measures",
-                f"{brand_name} account types"
+                f"{brand_name} account types",
             ]
             queries.extend(finance_queries)
-            
+
         else:
             general_queries = [
                 f"{brand_name} pricing",
@@ -1404,26 +1710,11 @@ class AIOptimizationEngine:
                 f"{brand_name} quality",
                 f"{brand_name} features",
                 f"{brand_name} benefits",
-                f"{brand_name} support"
+                f"{brand_name} support",
             ]
             queries.extend(general_queries)
-        
-        return queries
 
-    def _generate_fallback_queries(self, brand_name: str) -> List[str]:
-        """Generate basic fallback queries when intelligent generation fails"""
-        return [
-            f"What is {brand_name}?",
-            f"Tell me about {brand_name}",
-            f"How good is {brand_name}?",
-            f"{brand_name} reviews",
-            f"{brand_name} pricing",
-            f"Is {brand_name} reliable?",
-            f"{brand_name} vs competitors",
-            f"Should I choose {brand_name}?",
-            f"{brand_name} pros and cons",
-            f"{brand_name} customer experience"
-        ]
+        return queries
 
     async def _test_queries_across_platforms(self, brand_name: str, queries: List[str]) -> Dict[str, Any]:
         """Test queries across multiple AI platforms and combine results under each unique query"""
@@ -1996,11 +2287,13 @@ class AIOptimizationEngine:
         )
 
     def _create_simulated_query_results(self, brand_name: str, queries: List[str]) -> Dict[str, Any]:
-        """Produce simulated query analysis results compatible with both endpoints."""
+        """Produce simulated query analysis results for ALL queries, not just first 10."""
         results = []
         total_mentions = 0
         positions = []
-        for q in queries[:10]:
+        
+        # Process ALL queries, not just first 10
+        for q in queries:
             # Simulate a response text and detection
             sample_resp = f"{brand_name} is known for innovation. {q}"
             mentioned = self._detect_brand_mention(brand_name, sample_resp)
@@ -2022,7 +2315,8 @@ class AIOptimizationEngine:
             })
             if mentioned:
                 total_mentions += 1
-                positions.append(pos)
+                if pos is not None:
+                    positions.append(pos)
         avg_position = sum(positions) / len(positions) if positions else 5.0
         return {
             'total_queries_generated': len(queries),
