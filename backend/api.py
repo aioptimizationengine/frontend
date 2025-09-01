@@ -57,11 +57,8 @@ def sanitize_for_json(obj: Any) -> Any:
 # Essential imports - must work for API to function
 from database import get_db, check_database_health, SessionLocal
 from db_models import Brand, User, Analysis, UserRole, UserBrand
-from models import StandardResponse, ErrorResponse, User, Brand, Analysis, UserBrand
-from auth_utils import get_current_user_optional
 from models import StandardResponse, ErrorResponse
 from auth_utils import get_current_user
-from typing import Optional
 
 # Optional user dependency for testing
 async def get_current_user_optional() -> Optional[User]:
@@ -73,25 +70,40 @@ async def get_current_user_optional() -> Optional[User]:
         logger.warning(f"Authentication failed, proceeding without user: {e}")
         return None
 
-from auth_oauth import OAuthManager, PasswordResetManager
-from user_management import UserManager, UserService
-
-# Optional imports - can fail gracefully
+# Import optional modules - only import what exists
 try:
+    from auth_oauth import OAuthManager, PasswordResetManager
+    from user_management import UserManager, UserService
     from optimization_engine import AIOptimizationEngine
-    from utils import CacheUtils
-    from admin_routes import router as admin_router
-    from log_analysis_route import router as log_analysis_router
-    from subscription_manager import SubscriptionManager, PricingPlans
-    from payment_gateway import StripePaymentGateway, PaymentService
-    from api_key_manager import APIKeyManager, APIKeyEncryption
 except ImportError as e:
-    print(f"Optional import warning: {e}")
+    logger.warning(f"Optional import failed: {e}")
+    # Create fallback classes if needed
+    class OAuthManager:
+        def __init__(self, *args, **kwargs): pass
+        def create_access_token(self, *args, **kwargs): return "fallback_token"
+    
+    class PasswordResetManager:
+        def __init__(self, *args, **kwargs): pass
+        async def request_reset(self, *args, **kwargs): return {"success": False}
+        async def confirm_reset(self, *args, **kwargs): return {"success": False}
+    
+    class UserManager:
+        def __init__(self, *args, **kwargs): pass
+    
+    class UserService:
+        def __init__(self, *args, **kwargs): pass
+        async def register_user(self, *args, **kwargs): return {"success": False}
+        async def login_user(self, *args, **kwargs): return {"success": False}
 
-# Fallback empty routers if optional imports failed
-if 'admin_router' not in locals():
+# Optional routers - create empty ones if imports fail
+try:
+    from admin_routes import router as admin_router
+except ImportError:
     admin_router = APIRouter()
-if 'log_analysis_router' not in locals():
+
+try:
+    from log_analysis_route import router as log_analysis_router
+except ImportError:
     log_analysis_router = APIRouter()
 
 logger = structlog.get_logger()
@@ -290,7 +302,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={
             "success": False,
             "error": "Internal server error",
-            "timestamp": datetime.now().isoformat()
+            "detail": str(exc)
         }
     )
 
@@ -369,15 +381,19 @@ async def analyze_brand(
         # Get real API keys - fail if not available
         anthropic_key = os.getenv('ANTHROPIC_API_KEY')
         openai_key = os.getenv('OPENAI_API_KEY')
+        perplexity_key = os.getenv('PERPLEXITY_API_KEY')
         
         if not anthropic_key or anthropic_key == 'test_key':
             logger.warning("No valid ANTHROPIC_API_KEY found - using simulation")
         if not openai_key or openai_key == 'test_key':
             logger.warning("No valid OPENAI_API_KEY found - using simulation")
+        if not perplexity_key or perplexity_key == 'test_key':
+            logger.warning("No valid PERPLEXITY_API_KEY found - brand research will be limited")
             
         engine = AIOptimizationEngine({
             'anthropic_api_key': anthropic_key,
             'openai_api_key': openai_key,
+            'perplexity_api_key': perplexity_key,
             'environment': os.getenv('ENVIRONMENT', 'production'),
             'use_real_tracking': str(use_real_tracking_env).strip().lower() in {"1", "true", "yes", "y", "on"}
         })
@@ -456,14 +472,15 @@ async def analyze_brand(
             # keep original competitors_overview as-is
         
         # Create summary for dashboard compatibility
-        # Fix visibility score calculation - use success rate from query analysis
-        visibility_score = query_analysis.get('success_rate', 0.0)
-        if visibility_score > 1:  # If it's already a percentage > 100, normalize it
-            visibility_score = visibility_score / 100
-        
-        # Ensure visibility_score is never None or NaN
-        if visibility_score is None or visibility_score != visibility_score:  # Check for NaN
+        # Visibility score is derived from success_rate; normalize to a 0–1 range
+        visibility_score = query_analysis.get('success_rate', 0.0) or 0.0
+        # If provided as percentage (0–100), convert to 0–1
+        if isinstance(visibility_score, (int, float)) and visibility_score > 1:
+            visibility_score = visibility_score / 100.0
+        # Handle NaN/None and clamp to [0,1]
+        if visibility_score is None or not isinstance(visibility_score, (int, float)) or (isinstance(visibility_score, float) and (visibility_score != visibility_score)):
             visibility_score = 0.0
+        visibility_score = max(0.0, min(1.0, float(visibility_score)))
         
         # Get brand mentions from query analysis first, fallback to optimization metrics
         brand_mentions = query_analysis.get("brand_mentions", 0)
@@ -481,14 +498,30 @@ async def analyze_brand(
             "total_queries": query_analysis.get("total_queries_generated", len(semantic_queries)),
             "brand_mentions": brand_mentions,
             "avg_position": float(avg_position) if avg_position and avg_position > 0 else 5.0,
-            "visibility_score": float(visibility_score),  # Already converted to 0-100% above
+            # Keep visibility_score as 0–1 scalar; frontend formats with .1% where needed
+            "visibility_score": float(visibility_score),
             "tested_queries": query_analysis.get("tested_queries", 0),
-            "success_rate": query_analysis.get("success_rate", 0.0)
+            # Also ensure success_rate is clamped 0–1 for consistency
+            "success_rate": max(0.0, min(1.0, float(query_analysis.get("success_rate", 0.0) or 0.0)))
         }
+        
+        # Get priority recommendations and sanitize
+        priority_recommendations = analysis_result.get("priority_recommendations", [])
+        if hasattr(priority_recommendations, '__await__'):
+            # It's a coroutine, await it
+            try:
+                priority_recommendations = await priority_recommendations
+            except Exception as e:
+                logger.error(f"Failed to await priority_recommendations: {e}")
+                priority_recommendations = []
+        
+        # Sanitize priority_recommendations
+        if not isinstance(priority_recommendations, list):
+            priority_recommendations = []
         
         # Create SEO analysis structure
         seo_analysis = {
-            "priority_recommendations": analysis_result.get("priority_recommendations", []),
+            "priority_recommendations": priority_recommendations,
             "roadmap": [
                 {"phase": phase_key.replace('_', ' ').title(), "items": (phase_val.get("tasks", []) if isinstance(phase_val, dict) else [])}
                 for phase_key, phase_val in implementation_roadmap.items()
@@ -571,7 +604,8 @@ async def analyze_brand(
                     logger.info(f"Found existing brand: {brand.name} with ID: {brand.id}")
             
                 # Create analysis record with comprehensive data for dashboard
-                metrics_data = {
+                # Sanitize all data before database storage to prevent coroutine serialization errors
+                metrics_data = sanitize_for_json({
                     **optimization_metrics,
                     "queries": semantic_queries,
                     "product_categories": request.product_categories,
@@ -583,7 +617,7 @@ async def analyze_brand(
                     "query_analysis": query_analysis,
                     "performance_summary": performance_summary,
                     "competitors": competitors_overview
-                }
+                })
                 
                 # Log metrics data structure for debugging
                 logger.info(f"Saving analysis metrics with keys: {list(metrics_data.keys())}")
@@ -595,7 +629,7 @@ async def analyze_brand(
                     analysis_type="comprehensive",
                     data_source="real" if use_real_tracking_env.lower() in {"1", "true", "yes", "y", "on"} else "simulated",
                     metrics=metrics_data,
-                    recommendations=analysis_result.get("priority_recommendations", []),
+                    recommendations=sanitize_for_json(analysis_result.get("priority_recommendations", [])),
                     processing_time=processing_time,
                     started_at=datetime.fromtimestamp(analysis_start),
                     completed_at=datetime.now()
@@ -726,10 +760,12 @@ async def calculate_optimization_metrics(
         # Initialize optimization engine with real API keys
         anthropic_key = os.getenv('ANTHROPIC_API_KEY')
         openai_key = os.getenv('OPENAI_API_KEY')
+        perplexity_key = os.getenv('PERPLEXITY_API_KEY')
         
         engine = AIOptimizationEngine({
             'anthropic_api_key': anthropic_key,
             'openai_api_key': openai_key,
+            'perplexity_api_key': perplexity_key,
             'environment': os.getenv('ENVIRONMENT', 'production')
         })
         
@@ -816,10 +852,12 @@ async def analyze_queries(
         _ensure_engine_imported()
         anthropic_key = os.getenv('ANTHROPIC_API_KEY')
         openai_key = os.getenv('OPENAI_API_KEY')
+        perplexity_key = os.getenv('PERPLEXITY_API_KEY')
         
         engine = AIOptimizationEngine({
             'anthropic_api_key': anthropic_key,
             'openai_api_key': openai_key,
+            'perplexity_api_key': perplexity_key,
             'environment': os.getenv('ENVIRONMENT', 'production')
         })
         
@@ -1357,20 +1395,20 @@ async def get_brand_history(
             
             # Get analysis history
             analyses = db.query(Analysis).filter(Analysis.brand_id == brand.id).order_by(Analysis.created_at.desc()).all()
-        
-        analysis_history = []
-        for analysis in analyses:
-            analysis_history.append({
-                "id": str(analysis.id),
-                "status": analysis.status,
-                "analysis_type": analysis.analysis_type,
-                "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
-                "completed_at": analysis.completed_at.isoformat() if analysis.completed_at else None,
-                "processing_time": analysis.processing_time,
-                "total_bot_visits_analyzed": analysis.total_bot_visits_analyzed,
-                "citation_frequency": analysis.citation_frequency
-            })
-        
+            
+            analysis_history = []
+            for analysis in analyses:
+                analysis_history.append({
+                    "id": str(analysis.id),
+                    "status": analysis.status,
+                    "analysis_type": analysis.analysis_type,
+                    "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
+                    "completed_at": analysis.completed_at.isoformat() if analysis.completed_at else None,
+                    "processing_time": analysis.processing_time,
+                    "total_bot_visits_analyzed": analysis.total_bot_visits_analyzed,
+                    "citation_frequency": analysis.citation_frequency
+                })
+            
             return StandardResponse(
                 success=True,
                 data={

@@ -129,8 +129,9 @@ class AIOptimizationEngine:
             self.model = None
         
         # Initialize API clients if keys are provided and not in test mode
-        anthropic_key = config.get('anthropic_api_key')
-        openai_key = config.get('openai_api_key')
+        anthropic_key = config.get('anthropic_api_key') or os.getenv('ANTHROPIC_API_KEY')
+        openai_key = config.get('openai_api_key') or os.getenv('OPENAI_API_KEY')
+        perplexity_key = config.get('perplexity_api_key') or os.getenv('PERPLEXITY_API_KEY')
         
         # Check for real API keys (not test_key, not empty, and reasonable length)
         if anthropic_key and anthropic_key != 'test_key' and len(anthropic_key) > 10:
@@ -154,6 +155,22 @@ class AIOptimizationEngine:
                 logger.error(f"Failed to initialize OpenAI client: {e}")
         else:
             logger.warning(f"OpenAI API key not valid: {openai_key[:10] if openai_key else 'None'}...")
+        
+        # Initialize Perplexity client
+        if perplexity_key and perplexity_key != 'test_key' and len(perplexity_key) > 10:
+            try:
+                import openai as perplexity_openai
+                self.perplexity_client = perplexity_openai.AsyncOpenAI(
+                    api_key=perplexity_key,
+                    base_url="https://api.perplexity.ai"
+                )
+                logger.info("Perplexity client initialized with real API key")
+            except Exception as e:
+                logger.error(f"Failed to initialize Perplexity client: {e}")
+                self.perplexity_client = None
+        else:
+            logger.warning(f"Perplexity API key not valid: {perplexity_key[:10] if perplexity_key else 'None'}...")
+            self.perplexity_client = None
         
         # Initialize tracking manager if enabled - SET TO TRUE BY DEFAULT
         self.use_real_tracking = config.get('use_real_tracking', True)
