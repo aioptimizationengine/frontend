@@ -1905,6 +1905,8 @@ class AIOptimizationEngine:
                     "Immediate brand audit and competitive analysis",
                     "Emergency content creation focusing on brand mentions",
                     "Implement aggressive SEO and content marketing strategy",
+                ]
+            })
                    # Enhanced analysis results with comprehensive metrics
         analysis_results = [
             {
@@ -1943,19 +1945,12 @@ class AIOptimizationEngine:
                 "value": f"{optimization_metrics.get('llm_answer_coverage', 0):.1%}",
                 "status": "good" if optimization_metrics.get('llm_answer_coverage', 0) > 0.6 else "warning"
             }
-        ]"Optimize content for AI model training data",
-                    "Ensure brand name is prominently featured in content"
-                ],
-                "impact": "High",
-                "effort": "Medium",
-                "timeline": "2-4 weeks"
-{{ ... }}
-            "summary": "",
-            "priority_recommendations": {
-                "critical": [],
-                "high": [],
-                "medium": [],
-                "visibility_score": visibility_score,
+        ]
+        
+        # Create performance summary
+        performance_summary = {
+            "overall_score": visibility_score,
+            "visibility_score": visibility_score,
             "avg_position": avg_position,
             "industry": brand_context.get('industry', 'general business'),
             "brand_type": brand_context.get('brand_type', 'unknown'),
@@ -1973,44 +1968,61 @@ class AIOptimizationEngine:
         }
         
         # Add comprehensive brand report sections
-        report_sections = brand_report.get('report_sections', {})    "success_metrics": [],
-            "llm_sources": list(all_recommendations.keys())
+        report_sections = brand_report.get('report_sections', {})
+        
+        # Create synthesized recommendations
+        synthesized = {
+            "success_metrics": [],
+            "llm_sources": list(all_recommendations.keys()) if 'all_recommendations' in locals() else []
         }
         
-        # Extract and combine summaries
+        # Extract and combine summaries (only if all_recommendations exists)
         summaries = []
-{{ ... }}
-        for source, recs in all_recommendations.items():
-            if isinstance(recs, dict) and "summary" in recs:
-                summaries.append(recs["summary"])
+        if 'all_recommendations' in locals():
+            for source, recs in all_recommendations.items():
+                if isinstance(recs, dict) and "summary" in recs:
+                    summaries.append(recs["summary"])
         
         if summaries:
             synthesized["summary"] = summaries[0]  # Use first available summary
         else:
-            synthesized["summary"] = f"{brand_name} requires strategic optimization across multiple AI visibility metrics."
+            synthesized["summary"] = f"Brand analysis completed with optimization recommendations."
         
-        # Combine priority recommendations
-        for source, recs in all_recommendations.items():
-            if isinstance(recs, dict):
-                # Extract priority recommendations if available
-                if "priority_recommendations" in recs:
-                    priority_recs = recs["priority_recommendations"]
-                    for priority in ["critical", "high", "medium", "low"]:
-                        if priority in priority_recs and isinstance(priority_recs[priority], list):
-                            synthesized["priority_recommendations"][priority].extend(priority_recs[priority])
-                
-                # Extract other recommendation types
-                if "industry_strategies" in recs and isinstance(recs["industry_strategies"], list):
-                    synthesized["industry_strategies"].extend(recs["industry_strategies"])
-                
-                if "content_optimization" in recs and isinstance(recs["content_optimization"], list):
-                    synthesized["content_optimization"].extend(recs["content_optimization"])
-                
-                if "implementation_roadmap" in recs and isinstance(recs["implementation_roadmap"], dict):
-                    synthesized["implementation_roadmap"].update(recs["implementation_roadmap"])
-                
-                if "success_metrics" in recs and isinstance(recs["success_metrics"], list):
-                    synthesized["success_metrics"].extend(recs["success_metrics"])
+        # Initialize priority recommendations structure
+        synthesized["priority_recommendations"] = {
+            "critical": [],
+            "high": [],
+            "medium": [],
+            "low": []
+        }
+        synthesized["industry_strategies"] = []
+        synthesized["content_optimization"] = []
+        
+        # Combine priority recommendations (only if all_recommendations exists)
+        if 'all_recommendations' in locals():
+            for source, recs in all_recommendations.items():
+                if isinstance(recs, dict):
+                    # Extract priority recommendations if available
+                    if "priority_recommendations" in recs:
+                        priority_recs = recs["priority_recommendations"]
+                        for priority in ["critical", "high", "medium", "low"]:
+                            if priority in priority_recs and isinstance(priority_recs[priority], list):
+                                synthesized["priority_recommendations"][priority].extend(priority_recs[priority])
+                    
+                    # Extract other recommendation types
+                    if "industry_strategies" in recs and isinstance(recs["industry_strategies"], list):
+                        synthesized["industry_strategies"].extend(recs["industry_strategies"])
+                    
+                    if "content_optimization" in recs and isinstance(recs["content_optimization"], list):
+                        synthesized["content_optimization"].extend(recs["content_optimization"])
+                    
+                    if "implementation_roadmap" in recs and isinstance(recs["implementation_roadmap"], dict):
+                        if "implementation_roadmap" not in synthesized:
+                            synthesized["implementation_roadmap"] = {}
+                        synthesized["implementation_roadmap"].update(recs["implementation_roadmap"])
+                    
+                    if "success_metrics" in recs and isinstance(recs["success_metrics"], list):
+                        synthesized["success_metrics"].extend(recs["success_metrics"])
         
         # Add fallback recommendations based on metrics if none generated
         if not any(synthesized["priority_recommendations"].values()):
