@@ -4,12 +4,15 @@ All test method names and functionality implemented
 """
 
 import asyncio
+import json
 import logging
+import os
 import re
+import hashlib
 import time
-from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
+from dataclasses import dataclass, field
 import numpy as np
 from sentence_transformers import SentenceTransformer, util
 import anthropic
@@ -477,7 +480,7 @@ class AIOptimizationEngine:
 
             # Derived fields used elsewhere
             metrics.brand_strength_score = self._calculate_brand_strength_score(brand_name)
-            metrics.brand_visibility_potential = self._calculate_brand_visibility_potential(brand_name)
+            metrics.brand_visibility_potential = await self._calculate_brand_visibility_potential(brand_name, self.config.get('product_categories', []))
             metrics.content_quality_score = self._calculate_content_quality_score(chunks)
             metrics.industry_relevance = self._calculate_industry_relevance(brand_name, [])
 
@@ -517,11 +520,11 @@ class AIOptimizationEngine:
             metrics.llm_answer_coverage = self._estimate_coverage_from_brand(brand_name)
             metrics.ai_model_crawl_success_rate = brand_length_factor * 0.8
             metrics.semantic_density_score = brand_complexity * 0.9
-            metrics.zero_click_surface_presence = self._calculate_brand_visibility_potential(brand_name)
+            metrics.zero_click_surface_presence = self._calculate_visibility_potential_fallback(brand_name)
             metrics.machine_validated_authority = (brand_length_factor + brand_complexity) / 2 * 0.8
             # Derived fields even in fallback
             metrics.brand_strength_score = self._calculate_brand_strength_score(brand_name)
-            metrics.brand_visibility_potential = self._calculate_brand_visibility_potential(brand_name)
+            metrics.brand_visibility_potential = self._calculate_visibility_potential_fallback(brand_name)
             metrics.content_quality_score = max(0.0, min(1.0, 0.4 + 0.3 * brand_complexity))
             metrics.industry_relevance = max(0.0, min(1.0, 0.5 + 0.2 * brand_length_factor))
             metrics.overall_score = metrics.get_overall_score()
@@ -1449,8 +1452,10 @@ class AIOptimizationEngine:
         return unique_queries
 
     async def _llm_generate_queries(self, brand_name: str, product_categories: List[str], brand_context: Dict[str, Any]) -> List[str]:
-        """Use Anthropic/OpenAI to propose semantic queries for the brand. LLM-only; no heuristic fallback."""
+        """Use Perplexity, Anthropic, and OpenAI to propose semantic queries for the brand. Multi-LLM approach for comprehensive coverage."""
         use_cases = self._identify_use_cases(brand_name, brand_context.get('industry', 'general business'))
+        
+        # Enhanced prompt for better query generation
         prompt = (
             "You generate search-style queries to evaluate a brand's presence in AI answers.\n"
             "Output rules:\n"
@@ -1458,97 +1463,94 @@ class AIOptimizationEngine:
             "- One query per line.\n"
             "- No numbering or bullets.\n"
             "- Keep queries short and realistic.\n"
-            "- Prefer queries that explicitly include the brand name.\n"
-            "Context:\n"
-            f"Brand: {brand_name}\n"
-            f"Industry: {brand_context.get('industry', 'unknown')}\n"
-            f"Brand type: {brand_context.get('brand_type', 'general')}\n"
-            f"Use cases: {', '.join(use_cases)}\n"
-            f"Product categories: {', '.join(product_categories or [])}\n"
-            "Cover intents like: what, how, pricing, comparison, integration, benefits, reviews, alternatives.\n"
-            "Example format (do not prefix numbers):\n"
-            f"{brand_name} pricing\n{brand_name} vs competitors\nIs {brand_name} good for businesses?\n{brand_name} integration with Shopify\n"
+            f"Generate 25-35 diverse, high-quality semantic queries that users might ask about {brand_name}.\n"
+            f"Brand context: {brand_context.get('description', 'N/A')}\n"
+            f"Industry: {brand_context.get('industry', 'general business')}\n"
+            f"Product categories: {', '.join(product_categories)}\n"
+            f"Use cases: {', '.join(use_cases)}\n\n"
+            "Focus on generating queries that cover:\n"
+            "- Direct brand questions and comparisons\n"
+            "- Feature, pricing, and value inquiries\n"
+            "- Use case and application scenarios\n"
+            "- Problem-solving and troubleshooting\n"
+            "- Integration and compatibility questions\n"
+            "- Industry-specific applications\n"
+            "- User experience and reviews\n"
+            "- Technical specifications and requirements\n\n"
+            "Return only the queries, one per line, without numbering or bullets."
         )
-
-        results: List[str] = []
-
-        # Helper: parse text into list of queries
-        def _parse_queries_text(text: str) -> List[str]:
-            if not text:
-                return []
-            # Try JSON array first
+        
+        all_queries = []
+        
+        # Try Perplexity first for research-based queries
+        if hasattr(self, 'perplexity_client') and self.perplexity_client:
             try:
-                import json
-                data = json.loads(text)
-                if isinstance(data, list):
-                    return [str(x).strip() for x in data if str(x).strip()]
-            except Exception:
-                pass
-            # If inside code fences, extract inner
-            try:
-                import re
-                m = re.search(r"```(?:json|txt|text)?\n([\s\S]*?)```", text)
-                if m:
-                    inner = m.group(1)
-                    lines = [l.strip().lstrip("-•*\t ") for l in inner.splitlines()]
-                    return [l for l in lines if l]
-            except Exception:
-                pass
-            # Fallback to splitting lines
-            lines = [l.strip().lstrip("-•*\t ") for l in text.splitlines()]
-            return [l for l in lines if l]
-
-        # Try Anthropic first with robust parsing
-        try:
-            if self.anthropic_client:
-                msg = await self.anthropic_client.messages.create(
-                    model="claude-3-haiku-20240307",
-                    max_tokens=600,
-                    temperature=0.4,
-                    messages=[{"role": "user", "content": prompt}],
+                logger.info(f"Generating queries using Perplexity for {brand_name}")
+                perplexity_response = await self.perplexity_client.chat.completions.create(
+                    model="llama-3.1-sonar-small-128k-online",
+                    messages=[
+                        {"role": "system", "content": "You are an expert at generating semantic search queries that users ask about brands and products. Focus on real-world, practical questions."}, 
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=1000,
+                    temperature=0.7
                 )
-                text = ""
-                content = getattr(msg, 'content', None)
-                if content:
-                    try:
-                        # content can be list of blocks; each block may be an object with .text or a dict
-                        parts = []
-                        for block in content:
-                            if isinstance(block, dict):
-                                parts.append(block.get('text', '') or '')
-                            else:
-                                blk_text = getattr(block, 'text', '')
-                                parts.append(blk_text or '')
-                        text = "".join(parts)
-                    except Exception:
-                        pass
-                if not text:
-                    text = getattr(msg, 'text', '') or ''
-                results = _parse_queries_text(text)
-        except Exception as e:
-            logger.info(f"Anthropic query gen failed: {e}")
-
-        # If none, try OpenAI with robust parsing
-        if not results:
-            try:
-                if self.openai_client:
-                    completion = await self.openai_client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        temperature=0.4,
-                        messages=[
-                            {"role": "system", "content": "Return only queries, one per line, no numbering or bullets."},
-                            {"role": "user", "content": prompt},
-                        ],
-                    )
-                    text = ""
-                    if completion and getattr(completion, 'choices', None):
-                        try:
-                            text = completion.choices[0].message.content or ""
-                        except Exception:
-                            text = ""
-                    results = _parse_queries_text(text)
+                perplexity_content = perplexity_response.choices[0].message.content
+                perplexity_queries = [q.strip() for q in perplexity_content.split('\n') if q.strip() and not q.strip().startswith(('-', '*', '1.', '2.'))]
+                all_queries.extend(perplexity_queries[:15])  # Take top 15 from Perplexity
+                logger.info(f"Generated {len(perplexity_queries)} queries from Perplexity")
             except Exception as e:
-                logger.info(f"OpenAI query gen failed: {e}")
+                logger.warning(f"Perplexity query generation failed: {e}")
+        
+        # Try Anthropic for analytical queries
+        if hasattr(self, 'anthropic_client') and self.anthropic_client and len(all_queries) < 25:
+            try:
+                logger.info(f"Generating queries using Anthropic for {brand_name}")
+                anthropic_response = await self.anthropic_client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=800,
+                    temperature=0.2,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                anthropic_content = anthropic_response.content[0].text
+                anthropic_queries = [q.strip() for q in anthropic_content.split('\n') if q.strip() and not q.strip().startswith(('-', '*', '1.', '2.'))]
+                all_queries.extend(anthropic_queries[:12])  # Take top 12 from Anthropic
+                logger.info(f"Generated {len(anthropic_queries)} queries from Anthropic")
+            except Exception as e:
+                logger.warning(f"Anthropic query generation failed: {e}")
+        
+        # Try OpenAI for conversational queries
+        if hasattr(self, 'openai_client') and self.openai_client and len(all_queries) < 25:
+            try:
+                logger.info(f"Generating queries using OpenAI for {brand_name}")
+                openai_response = await self.openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": "You are an expert at generating natural, conversational queries that users ask about brands and products."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=800,
+                    temperature=0.8
+                )
+                openai_content = openai_response.choices[0].message.content
+                openai_queries = [q.strip() for q in openai_content.split('\n') if q.strip() and not q.strip().startswith(('-', '*', '1.', '2.'))]
+                all_queries.extend(openai_queries[:12])  # Take top 12 from OpenAI
+                logger.info(f"Generated {len(openai_queries)} queries from OpenAI")
+            except Exception as e:
+                logger.warning(f"OpenAI query generation failed: {e}")
+        
+        # Clean and deduplicate queries
+        clean_queries = []
+        seen_queries = set()
+        for q in all_queries:
+            q = q.strip()
+            q = q.lstrip("-•*\t ")
+            if q and q.lower() not in seen_queries:
+                clean_queries.append(q)
+                seen_queries.add(q.lower())
+        
+        logger.info(f"Generated {len(clean_queries)} unique queries from multiple LLMs")
+        return clean_queries[:50]  # Cap at 50 unique queries
 
         # Retry once with a stricter instruction if empty, still LLM-only
         if not results:
@@ -1556,27 +1558,27 @@ class AIOptimizationEngine:
             try:
                 if self.anthropic_client:
                     msg = await self.anthropic_client.messages.create(
-                        model="claude-3-haiku-20240307",
-                        max_tokens=600,
-                        temperature=0.2,
-                        messages=[{"role": "user", "content": retry_prompt}],
-                    )
-                    text = ""
-                    content = getattr(msg, 'content', None)
-                    if content:
-                        try:
-                            parts = []
-                            for block in content:
-                                if isinstance(block, dict):
-                                    parts.append(block.get('text', '') or '')
-                                else:
-                                    parts.append(getattr(block, 'text', '') or '')
-                            text = "".join(parts)
-                        except Exception:
-                            pass
-                    if not text:
-                        text = getattr(msg, 'text', '') or ''
-                    results = _parse_queries_text(text)
+                    model="claude-3-haiku-20240307",
+                    max_tokens=600,
+                    temperature=0.2,
+                    messages=[{"role": "user", "content": retry_prompt}],
+                )
+                text = ""
+                content = getattr(msg, 'content', None)
+                if content:
+                    try:
+                        parts = []
+                        for block in content:
+                            if isinstance(block, dict):
+                                parts.append(block.get('text', '') or '')
+                            else:
+                                parts.append(getattr(block, 'text', '') or '')
+                        text = "".join(parts)
+                    except Exception:
+                        pass
+                if not text:
+                    text = getattr(msg, 'text', '') or ''
+                results = _parse_queries_text(text)
             except Exception:
                 pass
         if not results and self.openai_client:
@@ -1587,6 +1589,56 @@ class AIOptimizationEngine:
                     messages=[
                         {"role": "system", "content": "Return only queries, one per line, no numbering or bullets."},
                         {"role": "user", "content": retry_prompt},
+                    ],
+                )
+                text = ""
+                if completion and getattr(completion, 'choices', None):
+                    try:
+                        text = completion.choices[0].message.content or ""
+                    except Exception:
+                        text = ""
+                results = _parse_queries_text(text)
+            except Exception:
+                pass
+
+        # Last-chance retry: change model/format and force JSON array
+        if not results:
+            try:
+                if self.anthropic_client:
+                    json_prompt = prompt + "\nReturn ONLY a JSON array of strings, no prose."
+                    msg = await self.anthropic_client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=700,
+                    temperature=0.3,
+                    messages=[{"role": "user", "content": json_prompt}],
+                )
+                text = ""
+                content = getattr(msg, 'content', None)
+                if content:
+                    try:
+                        parts = []
+                        for block in content:
+                            if isinstance(block, dict):
+                                parts.append(block.get('text', '') or '')
+                            else:
+                                parts.append(getattr(block, 'text', '') or '')
+                        text = "".join(parts)
+                    except Exception:
+                        pass
+                if not text:
+                    text = getattr(msg, 'text', '') or ''
+                results = _parse_queries_text(text)
+            except Exception:
+                pass
+        if not results and self.openai_client:
+            try:
+                json_prompt = prompt + "\nReturn ONLY a JSON array of strings, no prose."
+                completion = await self.openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    temperature=0.3,
+                    messages=[
+                        {"role": "system", "content": "Return only a JSON array of strings."},
+                        {"role": "user", "content": json_prompt},
                     ],
                 )
                 text = ""
@@ -1853,318 +1905,181 @@ class AIOptimizationEngine:
                     "Immediate brand audit and competitive analysis",
                     "Emergency content creation focusing on brand mentions",
                     "Implement aggressive SEO and content marketing strategy",
-                    "Consider rebranding or brand positioning changes"
-                ],
-                "impact": "Critical",
-                "effort": "High",
-                "timeline": "1-2 weeks"
-            })
-        
-        # HIGH PRIORITY - Attribution rate issues
-        elif metrics.attribution_rate < 0.6:
-            recommendations.append({
-                "priority": "high",
-                "category": "AI Visibility",
-                "title": "Improve Attribution Rate",
-                "description": f"Current attribution rate is {metrics.attribution_rate:.1%}. Target is 60%+.",
-                "action_items": [
-                    "Create comprehensive FAQ section",
-                    "Add customer testimonials and case studies",
-                    "Optimize content for AI model training data",
+                   # Enhanced analysis results with comprehensive metrics
+        analysis_results = [
+            {
+                "metric": "Overall Performance Score",
+                "value": f"{performance_summary.get('overall_score', 0):.1%}",
+                "status": "good" if performance_summary.get('overall_score', 0) > 0.7 else "warning",
+                "grade": performance_summary.get('performance_grade', 'C')
+            },
+            {
+                "metric": "Brand Strength Score", 
+                "value": f"{optimization_metrics.get('brand_strength_score', 0):.1%}",
+                "status": "good" if optimization_metrics.get('brand_strength_score', 0) > 0.7 else "warning"
+            },
+            {
+                "metric": "Visibility Potential",
+                "value": f"{optimization_metrics.get('brand_visibility_potential', 0):.1%}",
+                "status": "good" if optimization_metrics.get('brand_visibility_potential', 0) > 0.6 else "warning"
+            },
+            {
+                "metric": "Attribution Rate", 
+                "value": f"{optimization_metrics.get('attribution_rate', 0):.1%}",
+                "status": "good" if optimization_metrics.get('attribution_rate', 0) > 0.6 else "warning"
+            },
+            {
+                "metric": "AI Citation Count",
+                "value": str(optimization_metrics.get('ai_citation_count', 0)),
+                "status": "good" if optimization_metrics.get('ai_citation_count', 0) > 15 else "warning"
+            },
+            {
+                "metric": "Content Quality",
+                "value": f"{optimization_metrics.get('content_quality_score', 0):.1%}",
+                "status": "good" if optimization_metrics.get('content_quality_score', 0) > 0.7 else "warning"
+            },
+            {
+                "metric": "LLM Answer Coverage",
+                "value": f"{optimization_metrics.get('llm_answer_coverage', 0):.1%}",
+                "status": "good" if optimization_metrics.get('llm_answer_coverage', 0) > 0.6 else "warning"
+            }
+        ]"Optimize content for AI model training data",
                     "Ensure brand name is prominently featured in content"
                 ],
                 "impact": "High",
                 "effort": "Medium",
                 "timeline": "2-4 weeks"
-            })
+{{ ... }}
+            "summary": "",
+            "priority_recommendations": {
+                "critical": [],
+                "high": [],
+                "medium": [],
+                "visibility_score": visibility_score,
+            "avg_position": avg_position,
+            "industry": brand_context.get('industry', 'general business'),
+            "brand_type": brand_context.get('brand_type', 'unknown'),
+            "llm_sources_used": recommendations.get('llm_sources', ['fallback'])
+        }
         
-        # HIGH PRIORITY - Low AI citation count
-        if metrics.ai_citation_count < 10:
-            recommendations.append({
-                "priority": "high",
-                "category": "AI Training Data",
-                "title": "Increase AI Citation Opportunities",
-                "description": f"Current citation count is {metrics.ai_citation_count}. Target is 20+.",
-                "action_items": [
-                    "Publish authoritative content on industry topics",
-                    "Create data-driven reports and studies",
-                    "Engage in industry discussions and forums",
-                    "Optimize content for citation-worthy information"
-                ],
-                "impact": "High",
-                "effort": "High",
-                "timeline": "6-12 weeks"
-            })
+        # Enhanced recommendations with priority levels
+        enhanced_recommendations = {
+            "summary": recommendations.get('summary', f"{request.brand_name} analysis completed with multi-LLM insights."),
+            "priority_recommendations": recommendations.get('priority_recommendations', {}),
+            "industry_strategies": recommendations.get('industry_strategies', []),
+            "content_optimization": recommendations.get('content_optimization', []),
+            "implementation_roadmap": recommendations.get('implementation_roadmap', {}),
+            "overall_priority": recommendations.get('overall_priority', 'medium')
+        }
         
-        # MEDIUM PRIORITY - Semantic density issues
-        if metrics.semantic_density_score < 0.7:
-            recommendations.append({
-                "priority": "medium",
-                "category": "Content Optimization",
-                "title": "Enhance Semantic Density",
-                "description": f"Current semantic density is {metrics.semantic_density_score:.1%}. Target is 70%+.",
-                "action_items": [
-                    "Add more structured content with headers",
-                    "Include relevant keywords naturally",
-                    "Create topic clusters for better semantic coverage",
-                    "Add schema markup to web pages"
-                ],
-                "impact": "Medium",
-                "effort": "Medium",
-                "timeline": "3-6 weeks"
-            })
+        # Add comprehensive brand report sections
+        report_sections = brand_report.get('report_sections', {})    "success_metrics": [],
+            "llm_sources": list(all_recommendations.keys())
+        }
         
-        # MEDIUM PRIORITY - LLM answer coverage
-        if metrics.llm_answer_coverage < 0.6:
-            recommendations.append({
-                "priority": "medium",
-                "category": "Answer Coverage",
-                "title": "Improve LLM Answer Coverage",
-                "description": f"Current answer coverage is {metrics.llm_answer_coverage:.1%}. Target is 60%+.",
-                "action_items": [
-                    "Create comprehensive content covering common questions",
-                    "Develop detailed product/service documentation",
-                    "Add more contextual information to existing content",
-                    "Optimize content structure for better AI understanding"
-                ],
-                "impact": "Medium",
-                "effort": "Medium",
-                "timeline": "4-8 weeks"
-            })
+        # Extract and combine summaries
+        summaries = []
+{{ ... }}
+        for source, recs in all_recommendations.items():
+            if isinstance(recs, dict) and "summary" in recs:
+                summaries.append(recs["summary"])
         
-        # LOW PRIORITY - Fine-tuning optimizations
-        if metrics.zero_click_surface_presence < 0.5:
-            recommendations.append({
-                "priority": "low",
-                "category": "Zero-Click Optimization",
-                "title": "Enhance Zero-Click Presence",
-                "description": f"Current zero-click presence is {metrics.zero_click_surface_presence:.1%}. Target is 50%+.",
-                "action_items": [
-                    "Create more structured content (lists, tables)",
-                    "Optimize for featured snippet formats",
-                    "Add more direct answers to common questions",
-                    "Implement better content formatting"
-                ],
-                "impact": "Low",
-                "effort": "Low",
-                "timeline": "2-4 weeks"
-            })
+        if summaries:
+            synthesized["summary"] = summaries[0]  # Use first available summary
+        else:
+            synthesized["summary"] = f"{brand_name} requires strategic optimization across multiple AI visibility metrics."
         
-        # LOW PRIORITY - Vector index presence
-        if metrics.vector_index_presence_ratio < 0.5:
-            recommendations.append({
-                "priority": "low",
-                "category": "Technical Optimization",
-                "title": "Improve Vector Index Presence",
-                "description": f"Current vector presence is {metrics.vector_index_presence_ratio:.1%}. Target is 50%+.",
-                "action_items": [
-                    "Optimize content for better embedding quality",
-                    "Improve content semantic richness",
-                    "Add more diverse content types",
-                    "Enhance content metadata and structure"
-                ],
-                "impact": "Low",
-                "effort": "Medium",
-                "timeline": "4-6 weeks"
-            })
+        # Combine priority recommendations
+        for source, recs in all_recommendations.items():
+            if isinstance(recs, dict):
+                # Extract priority recommendations if available
+                if "priority_recommendations" in recs:
+                    priority_recs = recs["priority_recommendations"]
+                    for priority in ["critical", "high", "medium", "low"]:
+                        if priority in priority_recs and isinstance(priority_recs[priority], list):
+                            synthesized["priority_recommendations"][priority].extend(priority_recs[priority])
+                
+                # Extract other recommendation types
+                if "industry_strategies" in recs and isinstance(recs["industry_strategies"], list):
+                    synthesized["industry_strategies"].extend(recs["industry_strategies"])
+                
+                if "content_optimization" in recs and isinstance(recs["content_optimization"], list):
+                    synthesized["content_optimization"].extend(recs["content_optimization"])
+                
+                if "implementation_roadmap" in recs and isinstance(recs["implementation_roadmap"], dict):
+                    synthesized["implementation_roadmap"].update(recs["implementation_roadmap"])
+                
+                if "success_metrics" in recs and isinstance(recs["success_metrics"], list):
+                    synthesized["success_metrics"].extend(recs["success_metrics"])
+        
+        # Add fallback recommendations based on metrics if none generated
+        if not any(synthesized["priority_recommendations"].values()):
+            synthesized["priority_recommendations"] = self._generate_fallback_priority_recommendations(metrics, brand_name)
+        
+        # Determine overall priority
+        synthesized["overall_priority"] = self._determine_priority(metrics)
+        
+        return synthesized
+    
+    def _generate_fallback_priority_recommendations(self, metrics: OptimizationMetrics, brand_name: str) -> Dict[str, List[str]]:
+        """Generate fallback priority recommendations when LLMs are unavailable."""
+        recommendations = {
+            "critical": [],
+            "high": [],
+            "medium": [],
+            "low": []
+        }
+        
+        # Critical issues
+        if metrics.attribution_rate < 0.3 or metrics.brand_visibility_potential < 0.3:
+            recommendations["critical"].extend([
+                f"Urgent: {brand_name} has critically low AI visibility",
+                "Immediate brand audit and competitive analysis required",
+                "Emergency content creation focusing on brand mentions"
+            ])
+        
+        # High priority issues
+        if metrics.attribution_rate < 0.6:
+            recommendations["high"].extend([
+                f"Improve {brand_name} attribution rate through targeted content",
+                "Create comprehensive FAQ and knowledge base",
+                "Optimize content for AI model training data"
+            ])
+        
+        # Medium priority improvements
+        if metrics.content_quality_score < 0.7:
+            recommendations["medium"].extend([
+                "Enhance content quality and semantic density",
+                "Implement structured data and schema markup",
+                "Develop topic clusters for better coverage"
+            ])
+        
+        # Low priority optimizations
+        recommendations["low"].extend([
+            "Monitor AI citation opportunities",
+            "Track competitor AI visibility performance",
+            "Implement advanced analytics and reporting"
+        ])
         
         return recommendations
-
-    def _identify_strengths(self, metrics: OptimizationMetrics) -> List[str]:
-        """Identify metric strengths"""
-        strengths = []
-        
-        if metrics.attribution_rate > 0.8:
-            strengths.append("High brand attribution rate")
-        if metrics.semantic_density_score > 0.8:
-            strengths.append("Strong semantic content density")
-        if metrics.ai_citation_count > 30:
-            strengths.append("Excellent AI citation presence")
-        if metrics.llm_answer_coverage > 0.7:
-            strengths.append("Good LLM answer coverage")
-        
-        return strengths or ["Baseline metrics established"]
-
-    def _identify_weaknesses(self, metrics: OptimizationMetrics) -> List[str]:
-        """Identify metric weaknesses"""
-        weaknesses = []
-        
-        if metrics.attribution_rate < 0.5:
-            weaknesses.append("Low brand attribution rate")
-        if metrics.semantic_density_score < 0.6:
-            weaknesses.append("Insufficient semantic density")
-        if metrics.ai_citation_count < 10:
-            weaknesses.append("Limited AI citation presence")
-        if metrics.llm_answer_coverage < 0.5:
-            weaknesses.append("Poor LLM answer coverage")
-        
-        return weaknesses or ["No significant weaknesses identified"]
-
-    def _generate_implementation_roadmap(self, metrics: OptimizationMetrics, recommendations: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Generate implementation roadmap"""
-        return {
-            "phase_1": {
-                "timeline": "Weeks 1-4",
-                "focus": "Quick Wins",
-                "tasks": ["Content optimization", "FAQ creation", "Basic SEO improvements"]
-            },
-            "phase_2": {
-                "timeline": "Weeks 5-12",
-                "focus": "Structural Improvements",
-                "tasks": ["Schema markup", "Content restructuring", "Citation opportunities"]
-            },
-            "phase_3": {
-                "timeline": "Weeks 13-24",
-                "focus": "Advanced Optimization",
-                "tasks": ["AI model training data", "Advanced analytics", "Competitive positioning"]
-            }
-        }
-
-    # ==================== UTILITY METHODS ====================
-
-    def _validate_metrics(self, metrics: OptimizationMetrics) -> None:
-        """Validate metrics are within acceptable ranges"""
-        metric_fields = [
-            'chunk_retrieval_frequency', 'embedding_relevance_score', 'attribution_rate',
-            'vector_index_presence_ratio', 'retrieval_confidence_score', 'rrf_rank_contribution',
-            'llm_answer_coverage', 'ai_model_crawl_success_rate', 'semantic_density_score',
-            'zero_click_surface_presence', 'machine_validated_authority'
-        ]
-        
-        for field in metric_fields:
-            value = getattr(metrics, field)
-            if not isinstance(value, (int, float)) or value < 0 or value > 1:
-                logger.warning(f"Invalid metric value for {field}: {value}, setting to 0.5")
-                setattr(metrics, field, 0.5)
-        
-        # Validate citation count
-        if not isinstance(metrics.ai_citation_count, int) or metrics.ai_citation_count < 0:
-            logger.warning(f"Invalid citation count: {metrics.ai_citation_count}, setting to 0")
-            metrics.ai_citation_count = 0
-
-    # ==================== BRAND ANALYSIS METHODS ====================
-
-    async def _generate_brand_specific_recommendations(self, 
-                                                    metrics: OptimizationMetrics, 
-                                                    brand_name: str, 
-                                                    product_categories: List[str] = None) -> Dict[str, Any]:
-        """
-        Generate AI-powered brand-specific recommendations using GPT.
-        
-        Args:
-            metrics: OptimizationMetrics object containing brand metrics
-            brand_name: Name of the brand
-            product_categories: List of product categories associated with the brand
-            
-        Returns:
-            Dictionary containing AI-generated recommendations
-        """
-        if not product_categories:
-            product_categories = ["general"]
-            
-        # Prepare metrics summary for the prompt
-        metrics_summary = (
-            f"Brand: {brand_name}\n"
-            f"Brand Strength Score: {metrics.brand_strength_score:.2f}/1.0\n"
-            f"Visibility Potential: {metrics.brand_visibility_potential:.2f}/1.0\n"
-            f"Attribution Rate: {metrics.attribution_rate:.2f}/1.0\n"
-            f"Content Quality: {metrics.content_quality_score:.2f}/1.0\n"
-            f"Industry Relevance: {metrics.industry_relevance:.2f}/1.0\n"
-            f"AI Citation Count: {metrics.ai_citation_count}"
-        )
-        
-        # Prepare the prompt for GPT
-        prompt = f"""You are a brand optimization expert. Analyze the following brand metrics and provide specific, actionable recommendations.
-        
-        Brand Information:
-        - Brand Name: {brand_name}
-        - Product Categories: {', '.join(product_categories)}
-        
-        Current Metrics (0-1 scale, higher is better):
-        {metrics_summary}
-        
-        Please provide:
-        1. A brief 2-3 sentence summary of the brand's current standing
-        2. 3-5 specific, actionable recommendations to improve brand visibility and performance
-        3. Industry-specific suggestions based on the product categories
-        4. Content optimization strategies
-        
-        Format your response as a JSON object with these keys:
-        - summary: Brief overview
-        - recommendations: List of specific actions
-        - industry_suggestions: List of industry-specific tips
-        - content_strategies: List of content improvement ideas
-        """
-        
-        try:
-            # Try to get recommendations from GPT if API key is available
-            if hasattr(self, 'openai_client'):
-                response = await self.openai_client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant that provides brand optimization recommendations in JSON format."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    # Note: gpt-4o-mini doesn't support json_object response_format
-                )
-                
-                # Parse and return the response
-                content = response.choices[0].message.content
-                # Try to extract JSON from the response if it's wrapped in text
-                try:
-                    recommendations = json.loads(content)
-                except json.JSONDecodeError:
-                    # Try to find JSON within the text
-                    import re
-                    json_match = re.search(r'\{.*\}', content, re.DOTALL)
-                    if json_match:
-                        recommendations = json.loads(json_match.group())
-                    else:
-                        raise ValueError("No valid JSON found in response")
-                return {
-                    "summary": recommendations.get("summary", ""),
-                    "recommendations": {
-                        "brand_visibility": recommendations.get("recommendations", []),
-                        "industry_specific": recommendations.get("industry_suggestions", []),
-                        "content_improvement": recommendations.get("content_strategies", [])
-                    },
-                    "priority": self._determine_priority(metrics)
-                }
-                
-        except Exception as e:
-            logger.warning(f"Failed to generate AI recommendations: {str(e)}")
-            
-        # Fallback to basic recommendations if AI generation fails
-        return self._get_basic_recommendations(metrics, brand_name, product_categories)
-        
-    def _determine_priority(self, metrics: OptimizationMetrics) -> str:
-        """Determine priority level based on metrics."""
-        if metrics.brand_visibility_potential < 0.4 or metrics.attribution_rate < 0.3:
-            return "high"
-        elif metrics.content_quality_score < 0.6 or metrics.industry_relevance < 0.5:
-            return "medium"
-        return "low"
-        
+    
     def _get_basic_recommendations(self, metrics: OptimizationMetrics, 
                                  brand_name: str, 
                                  product_categories: List[str]) -> Dict[str, Any]:
         """Generate basic recommendations when AI is not available."""
         return {
             "summary": f"{brand_name} shows potential for optimization in several areas.",
-            "recommendations": {
-                "brand_visibility": [
-                    f"Improve brand recognition for {brand_name}",
-                    "Enhance visual identity and brand consistency"
-                ],
-                "industry_specific": [
-                    f"Research {cat} industry benchmarks" for cat in product_categories
-                ],
-                "content_improvement": [
-                    "Improve content quality and relevance",
-                    "Enhance content structure and readability"
-                ]
-            },
-            "priority": self._determine_priority(metrics)
+            "priority_recommendations": self._generate_fallback_priority_recommendations(metrics, brand_name),
+            "industry_strategies": [
+                f"Research {cat} industry benchmarks" for cat in product_categories
+            ],
+            "content_optimization": [
+                "Improve content quality and relevance",
+                "Enhance content structure and readability",
+                "Implement SEO best practices"
+            ],
+            "overall_priority": self._determine_priority(metrics),
+            "llm_sources": ["fallback"]
         }
 
 
@@ -2188,16 +2103,273 @@ class AIOptimizationEngine:
             logger.error(f"Error in _calculate_brand_strength_score: {e}")
             return 0.5
 
-    def _calculate_brand_visibility_potential(self, brand_name: str) -> float:
-        """Heuristic visibility potential based on memorability (short, unique names)."""
+    async def _calculate_brand_visibility_potential(self, brand_name: str, product_categories: List[str] = None) -> float:
+        """Calculate visibility potential based on brand appearance frequency for product queries using LLM analysis."""
         if not brand_name:
             return 0.3
+            
+        visibility_score = None
+        used_llm = False
+        
+        try:
+            # Generate product-specific queries for visibility testing
+            test_queries = await self._generate_visibility_test_queries(brand_name, product_categories or [])
+            
+            # Test brand visibility across these queries using LLM
+            visibility_score = await self._test_brand_visibility_with_llm(brand_name, test_queries)
+            
+            if visibility_score is not None:
+                used_llm = True
+                self._update_visibility_stats(used_llm=True, score=visibility_score)
+                return visibility_score
+                
+        except Exception as e:
+            logger.error(f"LLM visibility calculation failed for {brand_name}: {e}")
+            
+        # Fallback to enhanced heuristic calculation
+        fallback_score = self._calculate_visibility_potential_fallback(brand_name)
+        self._update_visibility_stats(used_llm=False, score=fallback_score)
+        return fallback_score
+        
+    def _calculate_visibility_potential_fallback(self, brand_name: str) -> float:
+        """Enhanced fallback visibility calculation based on brand characteristics."""
         name = brand_name.lower()
-        short_bonus = 0.2 if len(name) <= 6 else 0.05
-        unique_bonus = min(0.3, len(set(name)) / max(1, len(name)))
+        
+        # Brand name characteristics
+        length_factor = min(1.0, 8.0 / max(1, len(name)))  # Shorter names are more memorable
+        uniqueness = len(set(name)) / max(1, len(name))
+        
+        # Industry context boost
+        industry = self._determine_industry_context(brand_name, [])
+        industry_multipliers = {
+            'technology': 0.85,  # High visibility in tech space
+            'healthcare': 0.75,  # Moderate visibility
+            'finance': 0.70,     # Conservative visibility
+            'general_business': 0.65
+        }
+        industry_boost = industry_multipliers.get(industry, 0.65)
+        
+        # Brand strength component
         strength = self._calculate_brand_strength_score(brand_name)
-        return max(0.0, min(1.0, round(0.3 + short_bonus + unique_bonus + 0.3 * strength, 4)))
+        
+        # Calculate base visibility score
+        base_score = (
+            0.25 * length_factor +      # 25% name memorability
+            0.25 * uniqueness +         # 25% name uniqueness
+            0.30 * industry_boost +     # 30% industry context
+            0.20 * strength             # 20% brand strength
+        )
+        
+        # Add hash-based consistency for repeatable results
+        import hashlib
+        brand_hash = int(hashlib.md5(brand_name.lower().encode()).hexdigest()[:4], 16)
+        consistency_factor = (brand_hash % 15) / 100.0  # 0.00-0.14 variation
+        
+        final_score = base_score + consistency_factor
+        return max(0.1, min(0.9, round(final_score, 4)))
+        
+    async def _generate_visibility_test_queries(self, brand_name: str, product_categories: List[str]) -> List[str]:
+        """Generate product-specific queries to test brand visibility with caching."""
+        # Check cache first for performance
+        cache_key = f"{brand_name}_{hash(tuple(sorted(product_categories)))}"
+        if hasattr(self, '_visibility_query_cache') and cache_key in self._visibility_query_cache:
+            self._update_visibility_stats(used_llm=False, score=0.0, cache_hit=True)
+            return self._visibility_query_cache[cache_key]
+            
+        queries = []
+        
+        # Base product queries
+        if product_categories:
+            for category in product_categories[:3]:  # Limit to top 3 categories
+                queries.extend([
+                    f"best {category} solutions",
+                    f"top {category} providers",
+                    f"{category} comparison",
+                    f"leading {category} companies"
+                ])
+        
+        # Industry-specific queries
+        industry = self._determine_industry_context(brand_name, product_categories)
+        if industry == 'technology':
+            queries.extend([
+                "enterprise software solutions",
+                "cloud platform providers",
+                "AI technology companies",
+                "software development tools"
+            ])
+        elif industry == 'healthcare':
+            queries.extend([
+                "healthcare technology solutions",
+                "medical device companies",
+                "pharmaceutical providers",
+                "health management systems"
+            ])
+        elif industry == 'finance':
+            queries.extend([
+                "financial services providers",
+                "investment management companies",
+                "fintech solutions",
+                "banking technology"
+            ])
+        else:
+            queries.extend([
+                "business solutions providers",
+                "professional services companies",
+                "industry leaders",
+                "market solutions"
+            ])
+        
+        # Add brand-specific queries
+        queries.extend([
+            f"companies like {brand_name}",
+            f"{brand_name} alternatives",
+            f"{brand_name} competitors"
+        ])
+        
+        # Deduplicate and limit queries
+        unique_queries = list(set(queries))[:15]
+        
+        # Cache results for performance
+        if not hasattr(self, '_visibility_query_cache'):
+            self._visibility_query_cache = {}
+        self._visibility_query_cache[cache_key] = unique_queries
+        
+        return unique_queries
+        
+    async def _test_brand_visibility_with_llm(self, brand_name: str, test_queries: List[str]) -> float:
+        """Test brand visibility across queries using LLM analysis with optimized batch processing."""
+        if not test_queries or not (self.anthropic_client or self.openai_client):
+            return None
+            
+        try:
+            total_mentions = 0
+            total_queries = len(test_queries)
+            
+            # Limit queries for performance (test subset for faster results)
+            test_subset = test_queries[:8]  # Test 8 queries instead of all 15 for speed
+            
+            # Test each query for brand mentions
+            for i, query in enumerate(test_subset):
+                try:
+                    # Generate a response for this query using LLM
+                    response = await self._generate_query_response(query)
+                    
+                    if response:
+                        # Check if brand is mentioned in the response
+                        mentioned = self._detect_brand_mention(brand_name, response)
+                        if mentioned:
+                            total_mentions += 1
+                        
+                        # Log progress for visibility
+                        logger.debug(f"Visibility test {i+1}/{len(test_subset)}: {query} -> {'✓' if mentioned else '✗'}")
+                            
+                except Exception as e:
+                    logger.error(f"Error testing query '{query}': {e}")
+                    continue
+                    
+            # Adjust total_queries to reflect actual tested queries
+            total_queries = len(test_subset)
+            
+            # Calculate visibility percentage
+            if total_queries > 0:
+                visibility_percentage = total_mentions / total_queries
+                
+                # Convert to 0.1-0.9 scale with industry adjustments
+                industry = self._determine_industry_context(brand_name, [])
+                industry_multipliers = {
+                    'technology': 1.1,
+                    'healthcare': 0.9,
+                    'finance': 0.8,
+                    'general_business': 0.7
+                }
+                multiplier = industry_multipliers.get(industry, 0.7)
+                
+                adjusted_score = visibility_percentage * multiplier
+                final_score = 0.1 + (adjusted_score * 0.8)  # Map to 0.1-0.9 range
+                
+                logger.info(f"Brand visibility for {brand_name}: {total_mentions}/{total_queries} queries ({visibility_percentage:.2%}) -> {final_score:.3f}")
+                return max(0.1, min(0.9, round(final_score, 4)))
+                
+        except Exception as e:
+            logger.error(f"LLM visibility testing failed: {e}")
+            
+        return None
+        
+    async def _generate_query_response(self, query: str) -> str:
+        """Generate a response for a query using available LLM with optimized settings."""
+        try:
+            prompt = f"Provide a comprehensive answer to: {query}\n\nInclude relevant companies, products, and solutions in your response."
+            
+            if self.anthropic_client:
+                response = await self.anthropic_client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=200,  # Reduced for faster responses
+                    temperature=0.5,  # Lower temperature for more consistent results
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                
+                if hasattr(response, 'content') and response.content:
+                    text_parts = []
+                    for block in response.content:
+                        if hasattr(block, 'text'):
+                            text_parts.append(block.text)
+                        elif isinstance(block, dict) and 'text' in block:
+                            text_parts.append(block['text'])
+                    return ' '.join(text_parts)
+                    
+            elif self.openai_client:
+                response = await self.openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": "Provide comprehensive answers including relevant companies and solutions."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=200,  # Reduced for faster responses
+                    temperature=0.5   # Lower temperature for consistency
+                )
+                
+                if response.choices and response.choices[0].message:
+                    return response.choices[0].message.content or ""
+                    
+        except Exception as e:
+            logger.error(f"Error generating response for query '{query}': {e}")
+            
+        return ""
+        
+    def _get_visibility_performance_stats(self) -> Dict[str, Any]:
+        """Get performance statistics for visibility calculations."""
+        if not hasattr(self, '_visibility_stats'):
+            self._visibility_stats = {
+                'total_calculations': 0,
+                'llm_successful': 0,
+                'fallback_used': 0,
+                'cache_hits': 0,
+                'average_score': 0.0,
+                'last_updated': None
+            }
+        return self._visibility_stats
+        
+    def _update_visibility_stats(self, used_llm: bool, score: float, cache_hit: bool = False):
+        """Update visibility calculation performance statistics."""
+        stats = self._get_visibility_performance_stats()
+        stats['total_calculations'] += 1
+        
+        if cache_hit:
+            stats['cache_hits'] += 1
+        elif used_llm:
+            stats['llm_successful'] += 1
+        else:
+            stats['fallback_used'] += 1
+            
+        # Update running average
+        total = stats['total_calculations']
+        stats['average_score'] = ((stats['average_score'] * (total - 1)) + score) / total
+        stats['last_updated'] = datetime.now().isoformat()
 
+    def _estimate_coverage_from_brand(self, brand_name: str) -> float:
+        """Alias for _estimate_coverage_from_brand_name for backward compatibility."""
+        return self._estimate_coverage_from_brand_name(brand_name)
+        
     def _estimate_coverage_from_brand_name(self, brand_name: str) -> float:
         """Estimate answer coverage using inferred industry multiplier and brand strength."""
         industry = self._determine_industry_context(brand_name, [])
