@@ -202,6 +202,45 @@ export interface OptimizationMetrics {
   performance_summary?: any;
 }
 
+// LLM-Generated Content Interfaces
+export interface PriorityRecommendation {
+  title: string;
+  description: string;
+  impact: string;
+  effort: string;
+  timeline: string;
+}
+
+export interface PriorityRecommendations {
+  critical: PriorityRecommendation[];
+  high: PriorityRecommendation[];
+  medium: PriorityRecommendation[];
+  low: PriorityRecommendation[];
+}
+
+export interface BrandFAQ {
+  question: string;
+  answer: string;
+  category?: string;
+}
+
+export interface ImplementationPhase {
+  phase: string;
+  title: string;
+  duration: string;
+  tasks: string[];
+  deliverables: string[];
+  success_metrics: string[];
+}
+
+export interface ImplementationRoadmap {
+  overview: string;
+  total_timeline: string;
+  phases: ImplementationPhase[];
+  key_milestones: string[];
+  success_criteria: string[];
+}
+
 export interface AnalyzeBrandResponse {
   success: boolean;
   data: {
@@ -219,6 +258,23 @@ export interface AnalyzeBrandResponse {
       mention_count: number;
       avg_position: number;
     }[];
+    // Enhanced LLM-generated content
+    priority_recommendations?: PriorityRecommendations;
+    brand_faqs?: BrandFAQ[];
+    implementation_roadmap?: ImplementationRoadmap;
+    strengths?: string[];
+    weaknesses?: string[];
+    optimization_metrics?: OptimizationMetrics;
+    query_analysis?: {
+      summary_metrics: {
+        total_queries: number;
+        brand_mentions: number;
+        avg_position: number;
+        success_rate: number;
+      };
+      query_results: any[];
+      platforms_tested: string[];
+    };
   };
   message: string | null;
   timestamp: string;

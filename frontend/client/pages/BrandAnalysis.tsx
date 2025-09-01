@@ -30,6 +30,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import PriorityRecommendations from '@/components/analysis/PriorityRecommendations';
+import BrandFAQs from '@/components/analysis/BrandFAQs';
+import ImplementationRoadmap from '@/components/analysis/ImplementationRoadmap';
+import StrengthsWeaknesses from '@/components/analysis/StrengthsWeaknesses';
+import LoadingSpinner from '@/components/analysis/LoadingSpinner';
+import ErrorDisplay from '@/components/analysis/ErrorDisplay';
 import {
   Search,
   Building2,
@@ -175,14 +181,25 @@ export default function BrandAnalysis() {
       summary: {
         total_queries: number;
         brand_mentions: number;
+        success_rate: number;
         avg_position: number;
-        visibility_score: number;
       };
-      competitors_overview: any[];
-      // Add any other properties that might be in the response
+      competitor_analysis?: any;
+      priority_recommendations?: any;
+      brand_faqs?: any[];
+      implementation_roadmap?: any;
+      strengths?: string[];
+      weaknesses?: string[];
       [key: string]: any;
     } | null;
   } | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [llmLoading, setLlmLoading] = useState<{
+    recommendations: boolean;
+    faqs: boolean;
+    roadmap: boolean;
+    strengths: boolean;
+  }>({ recommendations: false, faqs: false, roadmap: false, strengths: false });
   const [analysisForm, setAnalysisForm] = useState<AnalysisFormState>({
     brand_name: '',
     website_url: '',
@@ -1105,12 +1122,64 @@ export default function BrandAnalysis() {
                               </div>
                             )}
 
-                            {/* Implementation Roadmap - Removed for now as it's causing type issues */}
+                            {/* LLM-Generated Components */}
+                            <div className="mt-8 space-y-8">
+                              {/* Priority Recommendations */}
+                              {llmLoading.recommendations ? (
+                                <LoadingSpinner type="recommendations" />
+                              ) : analysisData.data.priority_recommendations ? (
+                                <PriorityRecommendations recommendations={analysisData.data.priority_recommendations} />
+                              ) : analysisError && (
+                                <ErrorDisplay error={analysisError} type="llm" title="Failed to Generate Recommendations" />
+                              )}
+
+                              {/* Brand FAQs */}
+                              {llmLoading.faqs ? (
+                                <LoadingSpinner type="faqs" />
+                              ) : analysisData.data.brand_faqs ? (
+                                <BrandFAQs faqs={analysisData.data.brand_faqs} brandName={analysisData.data.brand_name} />
+                              ) : analysisError && (
+                                <ErrorDisplay error={analysisError} type="llm" title="Failed to Generate FAQs" />
+                              )}
+
+                              {/* Implementation Roadmap */}
+                              {llmLoading.roadmap ? (
+                                <LoadingSpinner type="roadmap" />
+                              ) : analysisData.data.implementation_roadmap ? (
+                                <ImplementationRoadmap roadmap={analysisData.data.implementation_roadmap} />
+                              ) : analysisError && (
+                                <ErrorDisplay error={analysisError} type="llm" title="Failed to Generate Roadmap" />
+                              )}
+
+                              {/* Strengths & Weaknesses */}
+                              {llmLoading.strengths ? (
+                                <LoadingSpinner title="Analyzing Strengths & Weaknesses" description="AI is evaluating your brand's competitive position..." />
+                              ) : (analysisData.data.strengths || analysisData.data.weaknesses) ? (
+                                <StrengthsWeaknesses 
+                                  strengths={analysisData.data.strengths} 
+                                  weaknesses={analysisData.data.weaknesses} 
+                                  brandName={analysisData.data.brand_name} 
+                                />
+                              ) : analysisError && (
+                                <ErrorDisplay error={analysisError} type="llm" title="Failed to Analyze Strengths & Weaknesses" />
+                              )}
+                            </div>
                           </div>
                         </AccordionContent>
                       </AccordionItem>
                     </Accordion>
                   </div>
+                ) : isLoading ? (
+                  <LoadingSpinner type="analysis" />
+                ) : analysisError ? (
+                  <ErrorDisplay 
+                    error={analysisError} 
+                    type="analysis" 
+                    onRetry={() => {
+                      setAnalysisError(null);
+                      // Retry logic would go here
+                    }} 
+                  />
                 ) : (
                   <div className="text-center py-8 text-gray-500">
                     <Brain className="mx-auto h-12 w-12 mb-4 text-gray-300" />

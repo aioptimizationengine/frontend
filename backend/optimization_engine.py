@@ -153,8 +153,8 @@ class AIOptimizationEngine:
         openai_key = config.get('openai_api_key') or os.getenv('OPENAI_API_KEY')
         perplexity_key = config.get('perplexity_api_key') or os.getenv('PERPLEXITY_API_KEY')
         
-        # Check for real API keys (not test_key, not empty, and reasonable length)
-        if anthropic_key and anthropic_key != 'test_key' and len(anthropic_key) > 10:
+        # Check for API keys (allow test_key for development, not empty, and reasonable length)
+        if anthropic_key and len(anthropic_key) > 5:
             try:
                 self.anthropic_client = anthropic.AsyncAnthropic(
                     api_key=anthropic_key
@@ -165,7 +165,7 @@ class AIOptimizationEngine:
         else:
             logger.warning(f"Anthropic API key not valid: {anthropic_key[:10] if anthropic_key else 'None'}...")
         
-        if openai_key and openai_key != 'test_key' and len(openai_key) > 10:
+        if openai_key and len(openai_key) > 5:
             try:
                 self.openai_client = openai.AsyncOpenAI(
                     api_key=openai_key
@@ -177,7 +177,7 @@ class AIOptimizationEngine:
             logger.warning(f"OpenAI API key not valid: {openai_key[:10] if openai_key else 'None'}...")
         
         # Initialize Perplexity client
-        if perplexity_key and perplexity_key != 'test_key' and len(perplexity_key) > 10:
+        if perplexity_key and len(perplexity_key) > 5:
             try:
                 import openai as perplexity_openai
                 self.perplexity_client = perplexity_openai.AsyncOpenAI(
@@ -1382,8 +1382,8 @@ class AIOptimizationEngine:
         - Otherwise, attempt LLM first; if unavailable or empty, fall back to heuristic generation
           using industry, brand type, and product categories (previous working behavior).
         """
-        # Determine mode from config (default: allow fallback)
-        llm_only = bool(self.config.get('llm_only_queries', False))
+        # Determine mode from config (default: prefer LLM with fallback)
+        llm_only = bool(self.config.get('llm_only_queries', True))  # Changed default to True to prefer LLM
 
         # Research brand context to enrich prompts and heuristics
         brand_context = await self._research_brand_context(brand_name, product_categories)
@@ -1396,28 +1396,43 @@ class AIOptimizationEngine:
             industry=industry,
             brand_type=brand_type,
             llm_only=llm_only,
+            anthropic_available=bool(self.anthropic_client),
+            openai_available=bool(self.openai_client),
+            perplexity_available=bool(getattr(self, 'perplexity_client', None))
         )
 
         # If strictly LLM-only, enforce clients and non-empty results
         if llm_only:
             if not (self.anthropic_client or self.openai_client):
-                raise RuntimeError("LLM query generation requires configured Anthropic or OpenAI client")
-            llm_queries = await self._llm_generate_queries(brand_name, product_categories, brand_context)
-            if not llm_queries:
-                raise RuntimeError("LLM query generation returned no queries")
-            unique_queries = list(dict.fromkeys([q.strip() for q in llm_queries if isinstance(q, str) and q.strip()]))[:60]
-            logger.info(f"Generated {len(unique_queries)} LLM queries (strict) for {brand_name}")
-            return unique_queries
+                logger.warning("No LLM clients available, falling back to heuristic generation")
+                # Fall back to heuristic instead of raising error
+                llm_only = False
+            else:
+                llm_queries = await self._llm_generate_queries(brand_name, product_categories, brand_context)
+                if llm_queries:
+                    unique_queries = list(dict.fromkeys([q.strip() for q in llm_queries if isinstance(q, str) and q.strip()]))[:60]
+                    logger.info(f"Generated {len(unique_queries)} LLM queries (strict) for {brand_name}")
+                    return unique_queries
+                else:
+                    logger.warning("LLM query generation returned no queries, falling back to heuristic")
+                    llm_only = False
 
         # Best-effort: try LLM first, then heuristic fallback
         queries: List[str] = []
-        try:
-            if (self.anthropic_client or self.openai_client):
-                llm_queries = await self._llm_generate_queries(brand_name, product_categories, brand_context)
-                if llm_queries:
-                    queries.extend(llm_queries)
-        except Exception as e:
-            logger.warning(f"LLM query generation failed, falling back to heuristics: {e}")
+        if not llm_only:  # Only do this if we're not in LLM-only mode
+            try:
+                if (self.anthropic_client or self.openai_client):
+                    logger.info(f"Attempting LLM query generation for {brand_name}")
+                    llm_queries = await self._llm_generate_queries(brand_name, product_categories, brand_context)
+                    if llm_queries:
+                        queries.extend(llm_queries)
+                        logger.info(f"Successfully generated {len(llm_queries)} LLM queries")
+                    else:
+                        logger.warning("LLM query generation returned empty results")
+                else:
+                    logger.warning("No LLM clients available for query generation")
+            except Exception as e:
+                logger.error(f"LLM query generation failed: {e}", exc_info=True)
 
         # Heuristic fallback if needed (revert-style behavior)
         if not queries:
@@ -1472,29 +1487,33 @@ class AIOptimizationEngine:
         """Use Perplexity, Anthropic, and OpenAI to propose semantic queries for the brand. Multi-LLM approach for comprehensive coverage."""
         use_cases = self._identify_use_cases(brand_name, brand_context.get('industry', 'general business'))
         
-        # Enhanced prompt for better query generation
+        # Enhanced prompt with detailed brand context for better query generation
+        brand_description = brand_context.get('description', f'{brand_name} is a company in the {brand_context.get("industry", "business")} industry')
+        
         prompt = (
-            "You generate search-style queries to evaluate a brand's presence in AI answers.\n"
-            "Output rules:\n"
-            "- Return 25-40 queries.\n"
-            "- One query per line.\n"
-            "- No numbering or bullets.\n"
-            "- Keep queries short and realistic.\n"
-            f"Generate 25-35 diverse, high-quality semantic queries that users might ask about {brand_name}.\n"
-            f"Brand context: {brand_context.get('description', 'N/A')}\n"
-            f"Industry: {brand_context.get('industry', 'general business')}\n"
-            f"Product categories: {', '.join(product_categories)}\n"
-            f"Use cases: {', '.join(use_cases)}\n\n"
-            "Focus on generating queries that cover:\n"
-            "- Direct brand questions and comparisons\n"
-            "- Feature, pricing, and value inquiries\n"
-            "- Use case and application scenarios\n"
-            "- Problem-solving and troubleshooting\n"
-            "- Integration and compatibility questions\n"
-            "- Industry-specific applications\n"
-            "- User experience and reviews\n"
-            "- Technical specifications and requirements\n\n"
-            "Return only the queries, one per line, without numbering or bullets."
+            f"Generate realistic search queries that users would ask when looking for information about {brand_name}.\n\n"
+            f"BRAND CONTEXT:\n"
+            f"- Name: {brand_name}\n"
+            f"- Industry: {brand_context.get('industry', 'general business')}\n"
+            f"- Description: {brand_description}\n"
+            f"- Product Categories: {', '.join(product_categories) if product_categories else 'general products/services'}\n"
+            f"- Key Use Cases: {', '.join(use_cases)}\n\n"
+            f"QUERY REQUIREMENTS:\n"
+            f"- Generate 30-40 diverse, realistic queries\n"
+            f"- Mix of informational, comparison, and decision-making queries\n"
+            f"- Include both brand-specific and category-based questions\n"
+            f"- Use natural language that real users would type\n"
+            f"- One query per line, no numbering or bullets\n\n"
+            f"QUERY TYPES TO INCLUDE:\n"
+            f"- \"What is {brand_name}\" and \"How does {brand_name} work\"\n"
+            f"- \"{brand_name} vs [competitor]\" comparisons\n"
+            f"- \"Best {', '.join(product_categories[:2]) if product_categories else 'solutions'} for [use case]\"\n"
+            f"- \"{brand_name} pricing\" and \"{brand_name} features\"\n"
+            f"- \"How to use {brand_name}\" and \"{brand_name} tutorial\"\n"
+            f"- \"{brand_name} reviews\" and \"Is {brand_name} good\"\n"
+            f"- Industry-specific questions about {brand_context.get('industry', 'business')} solutions\n"
+            f"- Problem-solving queries related to {', '.join(product_categories[:3]) if product_categories else 'business needs'}\n\n"
+            f"Return only the queries, one per line:"
         )
         
         all_queries = []
