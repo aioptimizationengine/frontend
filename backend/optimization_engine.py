@@ -2932,10 +2932,10 @@ Generate realistic FAQs that potential customers would ask about this brand. Inc
 
 Return in JSON format:
 [
-  {
-    "question": "What is {brand_name}?",
+  {{
+    "question": "What is the brand?",
     "answer": "Comprehensive answer explaining the brand..."
-  },
+  }},
   ...
 ]
 

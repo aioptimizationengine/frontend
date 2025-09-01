@@ -997,14 +997,12 @@ export default function BrandAnalysis() {
                                   What's Already There
                                 </h4>
                                 <div className="space-y-2">
-                                  {analysisData.data.seo_analysis?.roadmap?.filter(phase => phase.phase.includes('1'))?.map((phase, phaseIndex) => 
-                                    phase.items?.map((item, index) => (
-                                      <div key={`${phaseIndex}-${index}`} className="text-sm text-green-700 flex items-start">
-                                        <span className="w-2 h-2 bg-green-500 rounded-full mr-2 mt-1.5 flex-shrink-0"></span>
-                                        <span>{item}</span>
-                                      </div>
-                                    ))
-                                  )}
+                                  {analysisData.data.seo_analysis?.roadmap?.[0]?.key_actions?.map((action, index) => (
+                                    <div key={index} className="text-sm text-green-700 flex items-start">
+                                      <span className="w-2 h-2 bg-green-500 rounded-full mr-2 mt-1.5 flex-shrink-0"></span>
+                                      <span>{action}</span>
+                                    </div>
+                                  ))}
                                 </div>
                                 <div className="text-sm text-green-600 italic">
                                   SEO analysis will show existing optimized elements here
@@ -1018,14 +1016,12 @@ export default function BrandAnalysis() {
                                   What's Needed
                                 </h4>
                                 <div className="space-y-2">
-                                  {analysisData.data.seo_analysis?.roadmap?.filter(phase => phase.phase.includes('2'))?.map((phase, phaseIndex) => 
-                                    phase.items?.map((item, index) => (
-                                      <div key={`${phaseIndex}-${index}`} className="text-sm text-amber-700 flex items-start">
-                                        <span className="w-2 h-2 bg-amber-500 rounded-full mr-2 mt-1.5 flex-shrink-0"></span>
-                                        <span>{item}</span>
-                                      </div>
-                                    ))
-                                  )}
+                                  {analysisData.data.seo_analysis?.roadmap?.[1]?.key_actions?.map((action, index) => (
+                                    <div key={index} className="text-sm text-amber-700 flex items-start">
+                                      <span className="w-2 h-2 bg-amber-500 rounded-full mr-2 mt-1.5 flex-shrink-0"></span>
+                                      <span>{action}</span>
+                                    </div>
+                                  ))}
                                 </div>
                                 <div className="text-sm text-amber-600 italic">
                                   SEO analysis will show missing requirements here
@@ -1039,14 +1035,12 @@ export default function BrandAnalysis() {
                                   What's Perfect
                                 </h4>
                                 <div className="space-y-2">
-                                  {analysisData.data.seo_analysis?.roadmap?.filter(phase => phase.phase.includes('3'))?.map((phase, phaseIndex) => 
-                                    phase.items?.map((item, index) => (
-                                      <div key={`${phaseIndex}-${index}`} className="text-sm text-emerald-700 flex items-start">
-                                        <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2 mt-1.5 flex-shrink-0"></span>
-                                        <span>{item}</span>
-                                      </div>
-                                    ))
-                                  )}
+                                  {analysisData.data.seo_analysis?.roadmap?.[2]?.key_actions?.map((action, index) => (
+                                    <div key={index} className="text-sm text-emerald-700 flex items-start">
+                                      <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2 mt-1.5 flex-shrink-0"></span>
+                                      <span>{action}</span>
+                                    </div>
+                                  ))}
                                 </div>
                                 <div className="text-sm text-emerald-600 italic">
                                   SEO analysis will show perfectly optimized elements here
