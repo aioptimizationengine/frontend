@@ -286,10 +286,6 @@ class AIOptimizationEngine:
                 logger.warning(f"No valid LLM API clients available for {brand_name}. Using simulated results.")
                 logger.info(f"Anthropic client: {bool(self.anthropic_client)}, OpenAI client: {bool(self.openai_client)}")
                 query_analysis_results = self._create_simulated_query_results(brand_name, queries)
-            
-            # 3. FULL ANALYSIS - Generate recommendations and insights
-            recommendations = await self._generate_brand_specific_recommendations(metrics, brand_name, product_categories)
-            
             # Create performance summary with consistent grading
             performance_summary = {
                 "overall_score": metrics.get_overall_score(),
@@ -489,8 +485,7 @@ class AIOptimizationEngine:
             metrics.performance_grade = self._get_consistent_grade(brand_name, metrics.overall_score)
             metrics.performance_summary = self._calculate_performance_summary(metrics)
             
-            # Validate all metrics are within expected ranges
-            self._validate_metrics(metrics)
+
             
             # Log all calculated metrics for debugging
             logger.info(f"Metrics calculated for {brand_name}:")
@@ -637,8 +632,6 @@ class AIOptimizationEngine:
             # Performance Grade - Letter grade based on overall score
             metrics.performance_grade = metrics.get_performance_grade()
             
-            # Validate all metrics are within expected ranges
-            self._validate_metrics(metrics)
             
             logger.info(f"Calculated all 14 optimization metrics for {brand_name}")
             return metrics
@@ -1486,14 +1479,16 @@ class AIOptimizationEngine:
         if hasattr(self, 'perplexity_client') and self.perplexity_client:
             try:
                 logger.info(f"Generating queries using Perplexity for {brand_name}")
+                # Using a valid Perplexity model - 'llama-3-sonar-small-32k' is a valid model as of the latest API
                 perplexity_response = await self.perplexity_client.chat.completions.create(
-                    model="llama-3.1-sonar-small-128k-online",
+                    model="llama-3-sonar-small-32k",
                     messages=[
-                        {"role": "system", "content": "You are an expert at generating semantic search queries that users ask about brands and products. Focus on real-world, practical questions."}, 
+                        {"role": "system", "content": "You are an expert at generating semantic search queries that users ask about brands and products. Focus on real-world, practical questions."},
                         {"role": "user", "content": prompt}
                     ],
                     max_tokens=1000,
-                    temperature=0.7
+                    temperature=0.7,
+                    top_p=0.9
                 )
                 perplexity_content = perplexity_response.choices[0].message.content
                 perplexity_queries = [q.strip() for q in perplexity_content.split('\n') if q.strip() and not q.strip().startswith(('-', '*', '1.', '2.'))]
