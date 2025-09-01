@@ -407,12 +407,14 @@ async def analyze_brand(
             competitor_names=request.competitor_names
         )
         
-        # Extract key components for response
+        # Extract key components for response including new LLM-generated content
         optimization_metrics = analysis_result.get("optimization_metrics", {})
         semantic_queries = analysis_result.get("semantic_queries", [])
         query_analysis = analysis_result.get("query_analysis", {})
         implementation_roadmap = analysis_result.get("implementation_roadmap", {})
         performance_summary = analysis_result.get("performance_summary", {})
+        priority_recommendations = analysis_result.get("priority_recommendations", {})
+        brand_faqs = analysis_result.get("brand_faqs", [])
         
         # Create analysis results for frontend
         analysis_results = [
@@ -505,28 +507,15 @@ async def analyze_brand(
             "success_rate": max(0.0, min(1.0, float(query_analysis.get("success_rate", 0.0) or 0.0)))
         }
         
-        # Get priority recommendations and sanitize
-        priority_recommendations = analysis_result.get("priority_recommendations", [])
-        if hasattr(priority_recommendations, '__await__'):
-            # It's a coroutine, await it
-            try:
-                priority_recommendations = await priority_recommendations
-            except Exception as e:
-                logger.error(f"Failed to await priority_recommendations: {e}")
-                priority_recommendations = []
-        
-        # Sanitize priority_recommendations
-        if not isinstance(priority_recommendations, list):
-            priority_recommendations = []
-        
-        # Create SEO analysis structure
+        # Create SEO analysis structure with LLM-generated content
         seo_analysis = {
             "priority_recommendations": priority_recommendations,
-            "roadmap": [
-                {"phase": phase_key.replace('_', ' ').title(), "items": (phase_val.get("tasks", []) if isinstance(phase_val, dict) else [])}
-                for phase_key, phase_val in implementation_roadmap.items()
-            ],
-            "summary": f"Overall grade: {performance_summary.get('performance_grade', 'N/A')}"
+            "roadmap": implementation_roadmap.get("phases", []) if isinstance(implementation_roadmap, dict) else [],
+            "timeline": implementation_roadmap.get("timeline", {}) if isinstance(implementation_roadmap, dict) else {},
+            "summary": f"Overall grade: {performance_summary.get('performance_grade', 'N/A')}",
+            "brand_faqs": brand_faqs,
+            "strengths": performance_summary.get("strengths", []),
+            "weaknesses": performance_summary.get("weaknesses", [])
         }
 
         processing_time = time.time() - analysis_start
