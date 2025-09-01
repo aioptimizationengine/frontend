@@ -184,12 +184,22 @@ export interface OptimizationMetrics {
   embedding_relevance_score: number;
   attribution_rate: number;
   ai_citation_count: number;
-  vector_index_presence_rate: number;
-  query_response_quality: number;
-  brand_mention_sentiment: number;
-  competitor_gap_analysis: number;
-  content_optimization_score: number;
-  search_visibility_index: number;
+  vector_index_presence_ratio: number;
+  retrieval_confidence_score: number;
+  rrf_rank_contribution: number;
+  llm_answer_coverage: number;
+  amanda_crast_score: number;
+  semantic_density_score: number;
+  zero_click_surface_presence: number;
+  machine_validated_authority: number;
+  ai_model_crawl_success_rate?: number;
+  brand_strength_score?: number;
+  brand_visibility_potential?: number;
+  content_quality_score?: number;
+  industry_relevance?: number;
+  overall_score?: number;
+  performance_grade?: string;
+  performance_summary?: any;
 }
 
 export interface AnalyzeBrandResponse {
@@ -219,9 +229,10 @@ export interface OptimizationMetricsResponse {
   data: {
     brand_name: string;
     metrics: OptimizationMetrics;
-    benchmarks: OptimizationMetrics;
+    benchmarks: Record<string, number>;
     improvement_suggestions: string[];
     time_period: string;
+    ai_citation_count?: number;
   };
   timestamp: string;
 }
@@ -234,17 +245,24 @@ export interface AnalyzeQueriesResponse {
     query_results: {
       query: string;
       brand_mentioned: boolean;
-      position: number;
+      position: number | null;
       response_quality: number;
-      optimization_suggestions: string[];
+      optimization_suggestions?: string[];
       intent?: 'informational' | 'navigational' | 'transactional' | 'commercial_investigation';
+      response_text?: string;
+      platform?: string;
     }[];
     summary: {
       total_queries: number;
+      brand_mentions: number;
       successful_mentions: number;
       avg_position: number;
       overall_score: number;
+      visibility_score?: number;
     };
+    platform_breakdown?: Record<string, any>;
+    platforms_tested?: string[];
+    intent_insights?: Record<string, any>;
   };
   timestamp: string;
 }

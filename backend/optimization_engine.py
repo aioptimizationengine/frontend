@@ -465,7 +465,7 @@ class AIOptimizationEngine:
             metrics.retrieval_confidence_score = self._calculate_retrieval_confidence(chunks, queries)
             metrics.rrf_rank_contribution = self._calculate_rrf_rank_contribution(chunks, queries)
             metrics.llm_answer_coverage = await self._calculate_answer_coverage_safe(chunks, queries)
-            metrics.ai_model_crawl_success_rate = self._calculate_crawl_success_rate(brand_name)
+            metrics.ai_model_crawl_success_rate = self._calculate_brand_strength_score(brand_name)
             metrics.semantic_density_score = self._calculate_semantic_density(chunks)
             metrics.zero_click_surface_presence = self._calculate_zero_click_presence(chunks, queries)
             metrics.machine_validated_authority = await self._calculate_machine_authority(
@@ -1839,11 +1839,29 @@ class AIOptimizationEngine:
     # ==================== RECOMMENDATION METHODS ====================
 
     def _generate_recommendations(self, metrics: OptimizationMetrics, brand_name: str) -> List[Dict[str, Any]]:
-        """Generate actionable recommendations based on metrics"""
+        """Generate actionable recommendations based on metrics with critical/high/medium/low priority"""
         recommendations = []
         
-        # Check attribution rate
-        if metrics.attribution_rate < 0.6:
+        # CRITICAL PRIORITY - Brand visibility issues
+        if metrics.attribution_rate < 0.3 or metrics.brand_visibility_potential < 0.3:
+            recommendations.append({
+                "priority": "critical",
+                "category": "Brand Visibility Crisis",
+                "title": "Urgent Brand Recognition Issues",
+                "description": f"Critical visibility problems detected. Attribution rate: {metrics.attribution_rate:.1%}, Visibility potential: {metrics.brand_visibility_potential:.1%}",
+                "action_items": [
+                    "Immediate brand audit and competitive analysis",
+                    "Emergency content creation focusing on brand mentions",
+                    "Implement aggressive SEO and content marketing strategy",
+                    "Consider rebranding or brand positioning changes"
+                ],
+                "impact": "Critical",
+                "effort": "High",
+                "timeline": "1-2 weeks"
+            })
+        
+        # HIGH PRIORITY - Attribution rate issues
+        elif metrics.attribution_rate < 0.6:
             recommendations.append({
                 "priority": "high",
                 "category": "AI Visibility",
@@ -1860,7 +1878,25 @@ class AIOptimizationEngine:
                 "timeline": "2-4 weeks"
             })
         
-        # Check semantic density
+        # HIGH PRIORITY - Low AI citation count
+        if metrics.ai_citation_count < 10:
+            recommendations.append({
+                "priority": "high",
+                "category": "AI Training Data",
+                "title": "Increase AI Citation Opportunities",
+                "description": f"Current citation count is {metrics.ai_citation_count}. Target is 20+.",
+                "action_items": [
+                    "Publish authoritative content on industry topics",
+                    "Create data-driven reports and studies",
+                    "Engage in industry discussions and forums",
+                    "Optimize content for citation-worthy information"
+                ],
+                "impact": "High",
+                "effort": "High",
+                "timeline": "6-12 weeks"
+            })
+        
+        # MEDIUM PRIORITY - Semantic density issues
         if metrics.semantic_density_score < 0.7:
             recommendations.append({
                 "priority": "medium",
@@ -1878,22 +1914,58 @@ class AIOptimizationEngine:
                 "timeline": "3-6 weeks"
             })
         
-        # Check AI citation count
-        if metrics.ai_citation_count < 20:
+        # MEDIUM PRIORITY - LLM answer coverage
+        if metrics.llm_answer_coverage < 0.6:
             recommendations.append({
-                "priority": "high",
-                "category": "AI Training Data",
-                "title": "Increase AI Citation Opportunities",
-                "description": f"Current citation count is {metrics.ai_citation_count}. Target is 20+.",
+                "priority": "medium",
+                "category": "Answer Coverage",
+                "title": "Improve LLM Answer Coverage",
+                "description": f"Current answer coverage is {metrics.llm_answer_coverage:.1%}. Target is 60%+.",
                 "action_items": [
-                    "Publish authoritative content on industry topics",
-                    "Create data-driven reports and studies",
-                    "Engage in industry discussions and forums",
-                    "Optimize content for citation-worthy information"
+                    "Create comprehensive content covering common questions",
+                    "Develop detailed product/service documentation",
+                    "Add more contextual information to existing content",
+                    "Optimize content structure for better AI understanding"
                 ],
-                "impact": "High",
-                "effort": "High",
-                "timeline": "6-12 weeks"
+                "impact": "Medium",
+                "effort": "Medium",
+                "timeline": "4-8 weeks"
+            })
+        
+        # LOW PRIORITY - Fine-tuning optimizations
+        if metrics.zero_click_surface_presence < 0.5:
+            recommendations.append({
+                "priority": "low",
+                "category": "Zero-Click Optimization",
+                "title": "Enhance Zero-Click Presence",
+                "description": f"Current zero-click presence is {metrics.zero_click_surface_presence:.1%}. Target is 50%+.",
+                "action_items": [
+                    "Create more structured content (lists, tables)",
+                    "Optimize for featured snippet formats",
+                    "Add more direct answers to common questions",
+                    "Implement better content formatting"
+                ],
+                "impact": "Low",
+                "effort": "Low",
+                "timeline": "2-4 weeks"
+            })
+        
+        # LOW PRIORITY - Vector index presence
+        if metrics.vector_index_presence_ratio < 0.5:
+            recommendations.append({
+                "priority": "low",
+                "category": "Technical Optimization",
+                "title": "Improve Vector Index Presence",
+                "description": f"Current vector presence is {metrics.vector_index_presence_ratio:.1%}. Target is 50%+.",
+                "action_items": [
+                    "Optimize content for better embedding quality",
+                    "Improve content semantic richness",
+                    "Add more diverse content types",
+                    "Enhance content metadata and structure"
+                ],
+                "impact": "Low",
+                "effort": "Medium",
+                "timeline": "4-6 weeks"
             })
         
         return recommendations
@@ -2028,16 +2100,27 @@ class AIOptimizationEngine:
             # Try to get recommendations from GPT if API key is available
             if hasattr(self, 'openai_client'):
                 response = await self.openai_client.chat.completions.create(
-                    model="gpt-4",
+                    model="gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": "You are a helpful assistant that provides brand optimization recommendations in JSON format."},
                         {"role": "user", "content": prompt}
                     ],
-                    response_format={"type": "json_object"}
+                    # Note: gpt-4o-mini doesn't support json_object response_format
                 )
                 
                 # Parse and return the response
-                recommendations = json.loads(response.choices[0].message.content)
+                content = response.choices[0].message.content
+                # Try to extract JSON from the response if it's wrapped in text
+                try:
+                    recommendations = json.loads(content)
+                except json.JSONDecodeError:
+                    # Try to find JSON within the text
+                    import re
+                    json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                    if json_match:
+                        recommendations = json.loads(json_match.group())
+                    else:
+                        raise ValueError("No valid JSON found in response")
                 return {
                     "summary": recommendations.get("summary", ""),
                     "recommendations": {

@@ -122,11 +122,14 @@ interface OptimizationMetrics {
 interface LocalOptimizationMetricsResponse {
   success: boolean;
   data: {
+    brand_name: string;
     metrics: OptimizationMetrics;
-    benchmarks: Partial<OptimizationMetrics>;
+    benchmarks: Record<string, number>;
     improvement_suggestions: string[];
-    timestamp: string;
+    time_period: string;
+    ai_citation_count?: number;
   };
+  timestamp: string;
 }
 import { useApiController, fetchWithTimeout, TIMEOUT_DURATIONS, handleApiError } from '@/lib/api-utils';
 import { Lightbulb } from 'lucide-react';
