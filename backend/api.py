@@ -115,7 +115,7 @@ def _ensure_engine_imported():
     try:
         global AIOptimizationEngine
         if 'AIOptimizationEngine' not in globals():
-            from .optimization_engine import AIOptimizationEngine as _AIOptimizationEngine
+            from optimization_engine import AIOptimizationEngine as _AIOptimizationEngine
             AIOptimizationEngine = _AIOptimizationEngine  # type: ignore
     except Exception as e:
         logger.error(f"Failed to import AIOptimizationEngine: {e}")
