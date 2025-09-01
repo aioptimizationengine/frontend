@@ -56,10 +56,9 @@ class OptimizationMetrics:
     performance_summary: dict = None
     
     def to_dict(self) -> Dict[str, Any]:
-        # Use Pydantic's model_dump method if available (v2+), otherwise fall back to dict()
-        if hasattr(self, 'model_dump'):
-            return self.model_dump()
-        return self.dict()
+        # Convert dataclass to dictionary using asdict
+        from dataclasses import asdict
+        return asdict(self)
     
     def get_overall_score(self) -> float:
         """Calculate weighted overall score as per FRD requirements"""
@@ -1504,9 +1503,9 @@ class AIOptimizationEngine:
         if hasattr(self, 'perplexity_client') and self.perplexity_client:
             try:
                 logger.info(f"Generating queries using Perplexity for {brand_name}")
-                # Using a valid Perplexity model - 'llama-3-sonar-small-32k' is a valid model as of the latest API
+                # Using a valid Perplexity model - 'sonar' is the current basic model
                 perplexity_response = await self.perplexity_client.chat.completions.create(
-                    model="llama-3-sonar-small-32k",
+                    model="sonar",
                     messages=[
                         {"role": "system", "content": "You are an expert at generating semantic search queries that users ask about brands and products. Focus on real-world, practical questions."},
                         {"role": "user", "content": prompt}
